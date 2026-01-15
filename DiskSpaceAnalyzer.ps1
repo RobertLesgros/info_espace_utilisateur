@@ -887,7 +887,8 @@ function Show-MainWindow {
                         <Border Background="{TemplateBinding Background}"
                                 CornerRadius="5"
                                 Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
@@ -918,7 +919,7 @@ function Show-MainWindow {
             <StackPanel Orientation="Horizontal">
                 <Button x:Name="btnAnalyze" Content="Analyser" Style="{StaticResource ModernButton}" Margin="0,0,10,0"/>
                 <Button x:Name="btnExport" Content="Exporter HTML" Style="{StaticResource ModernButton}" Margin="0,0,10,0" IsEnabled="False"/>
-                <Button x:Name="btnCancel" Content="Annuler" Style="{StaticResource ModernButton}" Margin="0,0,10,0" IsEnabled="False" Background="#dc3545"/>
+                <Button x:Name="btnCancel" Content="Annuler" Style="{StaticResource ModernButton}" Margin="0,0,10,0" IsEnabled="False" Background="#dc3545" Foreground="White"/>
                 <Separator Margin="10,0" Background="$borderColor"/>
                 <TextBlock Text="Chemin:" VerticalAlignment="Center" Foreground="$textSecondary" Margin="0,0,10,0"/>
                 <TextBox x:Name="txtPath" Width="400" Padding="8" Background="$bgPrimary" Foreground="$textPrimary"
@@ -1146,7 +1147,7 @@ function Show-MainWindow {
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                             <Button x:Name="btnApplyFilters" Content="Appliquer et Re-analyser" Style="{StaticResource ModernButton}" Margin="0,0,10,0"/>
-                            <Button x:Name="btnResetFilters" Content="Reinitialiser" Style="{StaticResource ModernButton}" Background="#6c757d"/>
+                            <Button x:Name="btnResetFilters" Content="Reinitialiser" Style="{StaticResource ModernButton}" Background="#6c757d" Foreground="White"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -1161,7 +1162,7 @@ function Show-MainWindow {
                     </Grid.RowDefinitions>
 
                     <Button x:Name="btnClearLog" Content="Effacer le journal" Style="{StaticResource ModernButton}"
-                            HorizontalAlignment="Left" Margin="0,0,0,10" Background="#6c757d"/>
+                            HorizontalAlignment="Left" Margin="0,0,0,10" Background="#6c757d" Foreground="White"/>
 
                     <TextBox x:Name="txtLog" Grid.Row="1" IsReadOnly="True" TextWrapping="Wrap"
                              VerticalScrollBarVisibility="Auto" Background="$bgSecondary"
@@ -1293,11 +1294,14 @@ function Show-MainWindow {
         $txtDuplicates.Text = $results.Duplicates.Count.ToString()
 
         # Top 5 extensions
+        $maxSize = 0
+        foreach ($val in $results.ExtensionStats.Values) {
+            if ($val.Size -gt $maxSize) { $maxSize = $val.Size }
+        }
         $top5 = $results.ExtensionStats.GetEnumerator() |
             Sort-Object { $_.Value.Size } -Descending |
             Select-Object -First 5 |
             ForEach-Object {
-                $maxSize = ($results.ExtensionStats.Values | Measure-Object -Property Size -Maximum).Maximum
                 [PSCustomObject]@{
                     Extension = $_.Key
                     SizeFormatted = Format-FileSize -Bytes $_.Value.Size
