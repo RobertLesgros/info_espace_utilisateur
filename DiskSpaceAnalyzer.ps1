@@ -105,7 +105,7 @@ class FolderNode {
         $this.FileCount = 0
         $this.SubfolderCount = 0
         $this.PercentOfTotal = 0
-        $this.Children = [System.Collections.Generic.List[FolderNode]]::new()
+        $this.Children = New-Object 'System.Collections.Generic.List[FolderNode]'
     }
 
     [void] UpdateSizeFormatted() {
@@ -128,7 +128,7 @@ class DuplicateGroup {
         $this.FileSize = $size
         $this.FileSizeFormatted = [AnalyzedFile]::FormatSize($size)
         $this.DateModified = $dateModified
-        $this.Locations = [System.Collections.Generic.List[string]]::new()
+        $this.Locations = New-Object 'System.Collections.Generic.List[string]'
         $this.WastedSpace = 0
     }
 
@@ -159,18 +159,24 @@ class AnalysisResults {
     AnalysisResults([string]$rootPath) {
         $this.RootPath = $rootPath
         $this.AnalysisDate = Get-Date
-        $this.AllFiles = [System.Collections.Generic.List[AnalyzedFile]]::new()
-        $this.Top20Files = [System.Collections.Generic.List[AnalyzedFile]]::new()
-        $this.Duplicates = [System.Collections.Generic.List[DuplicateGroup]]::new()
+        $this.AllFiles = New-Object 'System.Collections.Generic.List[AnalyzedFile]'
+        $this.Top20Files = New-Object 'System.Collections.Generic.List[AnalyzedFile]'
+        $this.Duplicates = New-Object 'System.Collections.Generic.List[DuplicateGroup]'
         $this.ExtensionStats = @{}
-        $this.Errors = [System.Collections.Generic.List[string]]::new()
+        $this.Errors = New-Object 'System.Collections.Generic.List[string]'
 
         # Obtenir les infos du lecteur
-        $drive = [System.IO.Path]::GetPathRoot($rootPath)
         try {
-            $driveInfo = [System.IO.DriveInfo]::new($drive)
-            $this.DriveTotal = $driveInfo.TotalSize
-            $this.DriveFree = $driveInfo.AvailableFreeSpace
+            $drive = [System.IO.Path]::GetPathRoot($rootPath)
+            if ($drive) {
+                $driveLetter = $drive.Substring(0, 1)
+                $driveInfo = New-Object System.IO.DriveInfo($driveLetter)
+                $this.DriveTotal = $driveInfo.TotalSize
+                $this.DriveFree = $driveInfo.AvailableFreeSpace
+            } else {
+                $this.DriveTotal = 0
+                $this.DriveFree = 0
+            }
         } catch {
             $this.DriveTotal = 0
             $this.DriveFree = 0
@@ -338,7 +344,7 @@ function Scan-Directory {
 function Find-Duplicates {
     param([System.Collections.Generic.List[AnalyzedFile]]$Files)
 
-    $duplicates = [System.Collections.Generic.List[DuplicateGroup]]::new()
+    $duplicates = New-Object 'System.Collections.Generic.List[DuplicateGroup]'
 
     # Grouper par nom et date de modification
     $groups = $Files | Group-Object -Property { "$($_.Name.ToLower())|$($_.DateModified.ToString('yyyy-MM-dd HH:mm:ss'))" } | Where-Object { $_.Count -gt 1 }
@@ -388,9 +394,11 @@ function Start-Analysis {
     }
 
     # Top 20 fichiers
-    $results.Top20Files = [System.Collections.Generic.List[AnalyzedFile]]::new(
-        ($results.AllFiles | Sort-Object -Property Size -Descending | Select-Object -First 20)
-    )
+    $top20 = $results.AllFiles | Sort-Object -Property Size -Descending | Select-Object -First 20
+    $results.Top20Files = New-Object 'System.Collections.Generic.List[AnalyzedFile]'
+    foreach ($file in $top20) {
+        $results.Top20Files.Add($file)
+    }
 
     # Detection des doublons
     $results.Duplicates = Find-Duplicates -Files $results.AllFiles
@@ -1269,7 +1277,8 @@ function Show-MainWindow {
 "@
 
     # Parser le XAML
-    $reader = [System.Xml.XmlReader]::Create([System.IO.StringReader]::new($xaml))
+    $stringReader = New-Object System.IO.StringReader($xaml)
+    $reader = [System.Xml.XmlReader]::Create($stringReader)
     $window = [System.Windows.Markup.XamlReader]::Load($reader)
 
     # Recuperer les controles
@@ -1569,7 +1578,7 @@ function Show-MainWindow {
 
     # Event: Appliquer filtres
     $btnApplyFilters.Add_Click({
-        $btnAnalyze.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $btnAnalyze.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
     })
 
     # Event: Reinitialiser filtres
@@ -1611,10 +1620,10 @@ function Show-MainWindow {
     $window.Add_KeyDown({
         param($sender, $e)
         if ($e.Key -eq "F5") {
-            $btnAnalyze.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $btnAnalyze.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
         }
         elseif ($e.Key -eq "E" -and $e.KeyboardDevice.Modifiers -eq "Control") {
-            $btnExport.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $btnExport.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
         }
     })
 
