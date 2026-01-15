@@ -22,7 +22,7 @@
     Analyse le dossier specifie
 
 .NOTES
-    Version: 1.0
+    Version: 1.1
     Auteur: DiskSpaceAnalyzer
     Date: Janvier 2026
     Prerequis: Windows 10/11, PowerShell 5.1+, .NET Framework 4.5+
@@ -35,16 +35,12 @@ param(
 )
 
 #region Configuration et Variables Globales
-$Script:Version = "1.0"
+$Script:Version = "1.1"
 $Script:AppName = "Analyseur d'Espace Disque"
 $Script:AnalysisResults = $null
 $Script:CancelRequested = $false
 $Script:TotalFilesScanned = 0
 $Script:TotalSize = 0
-
-# Configuration par defaut des filtres
-$Script:DefaultExcludedExtensions = @('.tmp', '.log', '.bak', '.cache')
-$Script:DefaultExcludedFolders = @('AppData\Local\Temp', 'AppData\Local\Microsoft\Windows\INetCache')
 #endregion
 
 #region Chargement des Assemblies
@@ -55,147 +51,119 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Web
 #endregion
 
-#region Classes et Types Personnalises
+#region Fonctions de Creation d'Objets
 
-# Classe pour representer un fichier analyse
-class AnalyzedFile {
-    [string]$Name
-    [string]$FullPath
-    [string]$Directory
-    [long]$Size
-    [string]$SizeFormatted
-    [datetime]$DateModified
-    [datetime]$DateCreated
-    [string]$Extension
+function New-AnalyzedFile {
+    param([System.IO.FileInfo]$FileInfo)
 
-    AnalyzedFile([System.IO.FileInfo]$fileInfo) {
-        $this.Name = $fileInfo.Name
-        $this.FullPath = $fileInfo.FullName
-        $this.Directory = $fileInfo.DirectoryName
-        $this.Size = $fileInfo.Length
-        $this.SizeFormatted = [AnalyzedFile]::FormatSize($fileInfo.Length)
-        $this.DateModified = $fileInfo.LastWriteTime
-        $this.DateCreated = $fileInfo.CreationTime
-        $this.Extension = $fileInfo.Extension.ToLower()
-    }
-
-    static [string] FormatSize([long]$bytes) {
-        if ($bytes -ge 1GB) { return "{0:N2} Go" -f ($bytes / 1GB) }
-        elseif ($bytes -ge 1MB) { return "{0:N2} Mo" -f ($bytes / 1MB) }
-        elseif ($bytes -ge 1KB) { return "{0:N2} Ko" -f ($bytes / 1KB) }
-        else { return "$bytes octets" }
+    return [PSCustomObject]@{
+        Name = $FileInfo.Name
+        FullPath = $FileInfo.FullName
+        Directory = $FileInfo.DirectoryName
+        Size = $FileInfo.Length
+        SizeFormatted = Format-FileSize -Bytes $FileInfo.Length
+        DateModified = $FileInfo.LastWriteTime
+        DateCreated = $FileInfo.CreationTime
+        Extension = $FileInfo.Extension.ToLower()
     }
 }
 
-# Classe pour representer un noeud de dossier dans la hierarchie
-class FolderNode {
-    [string]$Name
-    [string]$FullPath
-    [long]$Size
-    [string]$SizeFormatted
-    [int]$FileCount
-    [int]$SubfolderCount
-    [double]$PercentOfTotal
-    [System.Collections.Generic.List[FolderNode]]$Children
+function New-FolderNode {
+    param(
+        [string]$Name,
+        [string]$FullPath
+    )
 
-    FolderNode([string]$name, [string]$fullPath) {
-        $this.Name = $name
-        $this.FullPath = $fullPath
-        $this.Size = 0
-        $this.FileCount = 0
-        $this.SubfolderCount = 0
-        $this.PercentOfTotal = 0
-        $this.Children = New-Object 'System.Collections.Generic.List[FolderNode]'
-    }
-
-    [void] UpdateSizeFormatted() {
-        $this.SizeFormatted = [AnalyzedFile]::FormatSize($this.Size)
+    return [PSCustomObject]@{
+        Name = $Name
+        FullPath = $FullPath
+        Size = [long]0
+        SizeFormatted = "0 octets"
+        FileCount = 0
+        SubfolderCount = 0
+        PercentOfTotal = [double]0
+        Children = [System.Collections.ArrayList]@()
     }
 }
 
-# Classe pour representer un groupe de doublons
-class DuplicateGroup {
-    [string]$FileName
-    [long]$FileSize
-    [string]$FileSizeFormatted
-    [datetime]$DateModified
-    [System.Collections.Generic.List[string]]$Locations
-    [long]$WastedSpace
-    [string]$WastedSpaceFormatted
+function New-DuplicateGroup {
+    param(
+        [string]$FileName,
+        [long]$FileSize,
+        [datetime]$DateModified
+    )
 
-    DuplicateGroup([string]$fileName, [long]$size, [datetime]$dateModified) {
-        $this.FileName = $fileName
-        $this.FileSize = $size
-        $this.FileSizeFormatted = [AnalyzedFile]::FormatSize($size)
-        $this.DateModified = $dateModified
-        $this.Locations = New-Object 'System.Collections.Generic.List[string]'
-        $this.WastedSpace = 0
-    }
-
-    [void] AddLocation([string]$path) {
-        $this.Locations.Add($path)
-        $this.WastedSpace = ($this.Locations.Count - 1) * $this.FileSize
-        $this.WastedSpaceFormatted = [AnalyzedFile]::FormatSize($this.WastedSpace)
+    return [PSCustomObject]@{
+        FileName = $FileName
+        FileSize = $FileSize
+        FileSizeFormatted = Format-FileSize -Bytes $FileSize
+        DateModified = $DateModified
+        Locations = [System.Collections.ArrayList]@()
+        WastedSpace = [long]0
+        WastedSpaceFormatted = "0 octets"
     }
 }
 
-# Classe pour les resultats d'analyse
-class AnalysisResults {
-    [string]$RootPath
-    [datetime]$AnalysisDate
-    [long]$TotalSize
-    [string]$TotalSizeFormatted
-    [int]$TotalFiles
-    [int]$TotalFolders
-    [long]$DriveTotal
-    [long]$DriveFree
-    [FolderNode]$RootNode
-    [System.Collections.Generic.List[AnalyzedFile]]$AllFiles
-    [System.Collections.Generic.List[AnalyzedFile]]$Top20Files
-    [System.Collections.Generic.List[DuplicateGroup]]$Duplicates
-    [hashtable]$ExtensionStats
-    [System.Collections.Generic.List[string]]$Errors
+function New-AnalysisResults {
+    param([string]$RootPath)
 
-    AnalysisResults([string]$rootPath) {
-        $this.RootPath = $rootPath
-        $this.AnalysisDate = Get-Date
-        $this.AllFiles = New-Object 'System.Collections.Generic.List[AnalyzedFile]'
-        $this.Top20Files = New-Object 'System.Collections.Generic.List[AnalyzedFile]'
-        $this.Duplicates = New-Object 'System.Collections.Generic.List[DuplicateGroup]'
-        $this.ExtensionStats = @{}
-        $this.Errors = New-Object 'System.Collections.Generic.List[string]'
+    $driveTotal = 0
+    $driveFree = 0
 
-        # Obtenir les infos du lecteur
-        try {
-            $drive = [System.IO.Path]::GetPathRoot($rootPath)
-            if ($drive) {
-                $driveLetter = $drive.Substring(0, 1)
-                $driveInfo = New-Object System.IO.DriveInfo($driveLetter)
-                $this.DriveTotal = $driveInfo.TotalSize
-                $this.DriveFree = $driveInfo.AvailableFreeSpace
-            } else {
-                $this.DriveTotal = 0
-                $this.DriveFree = 0
-            }
-        } catch {
-            $this.DriveTotal = 0
-            $this.DriveFree = 0
+    try {
+        $drive = [System.IO.Path]::GetPathRoot($RootPath)
+        if ($drive) {
+            $driveLetter = $drive.Substring(0, 1)
+            $driveInfo = New-Object System.IO.DriveInfo($driveLetter)
+            $driveTotal = $driveInfo.TotalSize
+            $driveFree = $driveInfo.AvailableFreeSpace
         }
+    } catch {
+        # Ignorer les erreurs
     }
 
-    [void] UpdateFormatted() {
-        $this.TotalSizeFormatted = [AnalyzedFile]::FormatSize($this.TotalSize)
+    return [PSCustomObject]@{
+        RootPath = $RootPath
+        AnalysisDate = Get-Date
+        TotalSize = [long]0
+        TotalSizeFormatted = "0 octets"
+        TotalFiles = 0
+        TotalFolders = 0
+        DriveTotal = $driveTotal
+        DriveFree = $driveFree
+        RootNode = $null
+        AllFiles = [System.Collections.ArrayList]@()
+        Top20Files = [System.Collections.ArrayList]@()
+        Duplicates = [System.Collections.ArrayList]@()
+        ExtensionStats = @{}
+        Errors = [System.Collections.ArrayList]@()
     }
+}
+
+function Add-DuplicateLocation {
+    param(
+        [PSCustomObject]$DupGroup,
+        [string]$Path
+    )
+
+    [void]$DupGroup.Locations.Add($Path)
+    $DupGroup.WastedSpace = ($DupGroup.Locations.Count - 1) * $DupGroup.FileSize
+    $DupGroup.WastedSpaceFormatted = Format-FileSize -Bytes $DupGroup.WastedSpace
 }
 #endregion
 
 #region Fonctions Utilitaires
 
+function Format-FileSize {
+    param([long]$Bytes)
+
+    if ($Bytes -ge 1GB) { return "{0:N2} Go" -f ($Bytes / 1GB) }
+    elseif ($Bytes -ge 1MB) { return "{0:N2} Mo" -f ($Bytes / 1MB) }
+    elseif ($Bytes -ge 1KB) { return "{0:N2} Ko" -f ($Bytes / 1KB) }
+    else { return "$Bytes octets" }
+}
+
 function Get-SystemTheme {
-    <#
-    .SYNOPSIS
-        Detecte le theme systeme Windows (clair/sombre)
-    #>
     try {
         $regPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
         $value = Get-ItemPropertyValue -Path $regPath -Name "AppsUseLightTheme" -ErrorAction SilentlyContinue
@@ -203,21 +171,6 @@ function Get-SystemTheme {
         else { return "Light" }
     } catch {
         return "Light"
-    }
-}
-
-function Format-FileSize {
-    param([long]$Bytes)
-    return [AnalyzedFile]::FormatSize($Bytes)
-}
-
-function Test-FileAccess {
-    param([string]$Path)
-    try {
-        [System.IO.File]::OpenRead($Path).Close()
-        return $true
-    } catch {
-        return $false
     }
 }
 
@@ -231,11 +184,6 @@ function Open-InExplorer {
         }
     }
 }
-
-function Copy-PathToClipboard {
-    param([string]$Path)
-    [System.Windows.Forms.Clipboard]::SetText($Path)
-}
 #endregion
 
 #region Fonctions d'Analyse
@@ -243,7 +191,7 @@ function Copy-PathToClipboard {
 function Scan-Directory {
     param(
         [string]$DirectoryPath,
-        [FolderNode]$ParentNode,
+        [PSCustomObject]$ParentNode,
         [scriptblock]$ProgressCallback,
         [ref]$Results,
         [hashtable]$Filters
@@ -258,10 +206,9 @@ function Scan-Directory {
             if ($Script:CancelRequested) { return }
 
             if ($item.PSIsContainer) {
-                # C'est un dossier
-                $childNode = [FolderNode]::new($item.Name, $item.FullName)
+                $childNode = New-FolderNode -Name $item.Name -FullPath $item.FullName
                 $ParentNode.SubfolderCount++
-                $ParentNode.Children.Add($childNode)
+                [void]$ParentNode.Children.Add($childNode)
 
                 # Verifier si le dossier est exclu
                 $excluded = $false
@@ -275,17 +222,14 @@ function Scan-Directory {
                 }
 
                 if (-not $excluded) {
-                    # Analyser recursivement
                     Scan-Directory -DirectoryPath $item.FullName -ParentNode $childNode -ProgressCallback $ProgressCallback -Results $Results -Filters $Filters
                 }
 
-                # Propager la taille vers le parent
                 $ParentNode.Size += $childNode.Size
                 $ParentNode.FileCount += $childNode.FileCount
-                $childNode.UpdateSizeFormatted()
+                $childNode.SizeFormatted = Format-FileSize -Bytes $childNode.Size
 
             } else {
-                # C'est un fichier
                 $ParentNode.FileCount++
                 $Script:TotalFilesScanned++
 
@@ -294,29 +238,24 @@ function Scan-Directory {
                     $ParentNode.Size += $fileSize
                     $Script:TotalSize += $fileSize
 
-                    # Verifier les filtres
                     $include = $true
 
                     if ($Filters) {
-                        # Filtre par extension
                         if ($Filters.ExcludedExtensions -and $Filters.ExcludedExtensions -contains $item.Extension.ToLower()) {
                             $include = $false
                         }
-                        # Filtre par taille minimum
                         if ($Filters.MinSize -and $fileSize -lt $Filters.MinSize) {
                             $include = $false
                         }
-                        # Filtre par date
                         if ($Filters.OlderThan -and $item.LastWriteTime -gt $Filters.OlderThan) {
                             $include = $false
                         }
                     }
 
                     if ($include) {
-                        $analyzedFile = [AnalyzedFile]::new($item)
-                        $Results.Value.AllFiles.Add($analyzedFile)
+                        $analyzedFile = New-AnalyzedFile -FileInfo $item
+                        [void]$Results.Value.AllFiles.Add($analyzedFile)
 
-                        # Statistiques par extension
                         $ext = $item.Extension.ToLower()
                         if (-not $ext) { $ext = "(sans extension)" }
                         if (-not $Results.Value.ExtensionStats.ContainsKey($ext)) {
@@ -326,38 +265,36 @@ function Scan-Directory {
                         $Results.Value.ExtensionStats[$ext].Size += $fileSize
                     }
 
-                    # Callback de progression
                     if ($ProgressCallback -and ($Script:TotalFilesScanned % 100 -eq 0)) {
                         & $ProgressCallback $item.DirectoryName $Script:TotalFilesScanned
                     }
 
                 } catch {
-                    $Results.Value.Errors.Add("Erreur lecture: $($item.FullName) - $($_.Exception.Message)")
+                    [void]$Results.Value.Errors.Add("Erreur lecture: $($item.FullName) - $($_.Exception.Message)")
                 }
             }
         }
     } catch {
-        $Results.Value.Errors.Add("Erreur acces dossier: $DirectoryPath - $($_.Exception.Message)")
+        [void]$Results.Value.Errors.Add("Erreur acces dossier: $DirectoryPath - $($_.Exception.Message)")
     }
 }
 
 function Find-Duplicates {
-    param([System.Collections.Generic.List[AnalyzedFile]]$Files)
+    param([System.Collections.ArrayList]$Files)
 
-    $duplicates = New-Object 'System.Collections.Generic.List[DuplicateGroup]'
+    $duplicates = [System.Collections.ArrayList]@()
 
-    # Grouper par nom et date de modification
     $groups = $Files | Group-Object -Property { "$($_.Name.ToLower())|$($_.DateModified.ToString('yyyy-MM-dd HH:mm:ss'))" } | Where-Object { $_.Count -gt 1 }
 
     foreach ($group in $groups) {
         $firstFile = $group.Group[0]
-        $dupGroup = [DuplicateGroup]::new($firstFile.Name, $firstFile.Size, $firstFile.DateModified)
+        $dupGroup = New-DuplicateGroup -FileName $firstFile.Name -FileSize $firstFile.Size -DateModified $firstFile.DateModified
 
         foreach ($file in $group.Group) {
-            $dupGroup.AddLocation($file.FullPath)
+            Add-DuplicateLocation -DupGroup $dupGroup -Path $file.FullPath
         }
 
-        $duplicates.Add($dupGroup)
+        [void]$duplicates.Add($dupGroup)
     }
 
     return $duplicates
@@ -374,30 +311,28 @@ function Start-Analysis {
     $Script:TotalFilesScanned = 0
     $Script:TotalSize = 0
 
-    $results = [AnalysisResults]::new($RootPath)
-    $rootNode = [FolderNode]::new((Split-Path $RootPath -Leaf), $RootPath)
+    $results = New-AnalysisResults -RootPath $RootPath
+    $rootNode = New-FolderNode -Name (Split-Path $RootPath -Leaf) -FullPath $RootPath
 
     $resultsRef = [ref]$results
 
     Scan-Directory -DirectoryPath $RootPath -ParentNode $rootNode -ProgressCallback $ProgressCallback -Results $resultsRef -Filters $Filters
 
-    $rootNode.UpdateSizeFormatted()
+    $rootNode.SizeFormatted = Format-FileSize -Bytes $rootNode.Size
     $results.RootNode = $rootNode
     $results.TotalSize = $Script:TotalSize
     $results.TotalFiles = $Script:TotalFilesScanned
     $results.TotalFolders = (Get-ChildItem -Path $RootPath -Directory -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
-    $results.UpdateFormatted()
+    $results.TotalSizeFormatted = Format-FileSize -Bytes $results.TotalSize
 
-    # Calculer les pourcentages
     if ($results.TotalSize -gt 0) {
         Update-FolderPercentages -Node $rootNode -TotalSize $results.TotalSize
     }
 
     # Top 20 fichiers
     $top20 = $results.AllFiles | Sort-Object -Property Size -Descending | Select-Object -First 20
-    $results.Top20Files = New-Object 'System.Collections.Generic.List[AnalyzedFile]'
     foreach ($file in $top20) {
-        $results.Top20Files.Add($file)
+        [void]$results.Top20Files.Add($file)
     }
 
     # Detection des doublons
@@ -408,7 +343,7 @@ function Start-Analysis {
 
 function Update-FolderPercentages {
     param(
-        [FolderNode]$Node,
+        [PSCustomObject]$Node,
         [long]$TotalSize
     )
 
@@ -425,7 +360,7 @@ function Update-FolderPercentages {
 #region Generation du Rapport HTML
 
 function Generate-HTMLReport {
-    param([AnalysisResults]$Results)
+    param([PSCustomObject]$Results)
 
     $chartLabels = ($Results.ExtensionStats.GetEnumerator() | Sort-Object { $_.Value.Size } -Descending | Select-Object -First 10 | ForEach-Object { "'$($_.Key)'" }) -join ","
     $chartData = ($Results.ExtensionStats.GetEnumerator() | Sort-Object { $_.Value.Size } -Descending | Select-Object -First 10 | ForEach-Object { [math]::Round($_.Value.Size / 1MB, 2) }) -join ","
@@ -863,7 +798,6 @@ function Generate-HTMLReport {
                 let aVal = a.cells[colIndex].textContent.trim();
                 let bVal = b.cells[colIndex].textContent.trim();
 
-                // Essayer de parser comme nombre
                 let aNum = parseFloat(aVal.replace(/[^\d.-]/g, ''));
                 let bNum = parseFloat(bVal.replace(/[^\d.-]/g, ''));
 
@@ -885,7 +819,7 @@ function Generate-HTMLReport {
             for (let row of rows) {
                 let cols = row.querySelectorAll('td, th');
                 let rowData = [];
-                for (let i = 0; i < cols.length - 1; i++) { // Exclure la colonne Action
+                for (let i = 0; i < cols.length - 1; i++) {
                     let text = cols[i].textContent.replace(/"/g, '""');
                     rowData.push('"' + text + '"');
                 }
@@ -914,7 +848,6 @@ function Show-MainWindow {
 
     $theme = Get-SystemTheme
 
-    # Couleurs selon le theme
     if ($theme -eq "Dark") {
         $bgPrimary = "#1a1a2e"
         $bgSecondary = "#16213e"
@@ -1008,7 +941,6 @@ function Show-MainWindow {
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Statistiques -->
                         <UniformGrid Grid.Row="0" Columns="4" Margin="0,0,0,20">
                             <Border Background="$bgSecondary" Margin="5" Padding="20" CornerRadius="10" BorderBrush="$borderColor" BorderThickness="1">
                                 <StackPanel HorizontalAlignment="Center">
@@ -1036,7 +968,6 @@ function Show-MainWindow {
                             </Border>
                         </UniformGrid>
 
-                        <!-- Top 5 Extensions -->
                         <Border Grid.Row="1" Background="$bgSecondary" Padding="20" CornerRadius="10" BorderBrush="$borderColor" BorderThickness="1">
                             <StackPanel>
                                 <TextBlock Text="Top 5 des types de fichiers" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,15"/>
@@ -1109,15 +1040,6 @@ function Show-MainWindow {
                             <DataGridTextColumn Header="Modifie" Binding="{Binding DateModified, StringFormat=dd/MM/yyyy HH:mm}" Width="130"/>
                             <DataGridTextColumn Header="Cree" Binding="{Binding DateCreated, StringFormat=dd/MM/yyyy HH:mm}" Width="130"/>
                             <DataGridTextColumn Header="Extension" Binding="{Binding Extension}" Width="80"/>
-                            <DataGridTemplateColumn Header="Action" Width="100">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Content="Ouvrir" Tag="{Binding FullPath}" Click="OpenFile_Click"
-                                                Padding="8,4" Background="$accentColor" Foreground="White"
-                                                BorderThickness="0" Cursor="Hand"/>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>
@@ -1154,9 +1076,7 @@ function Show-MainWindow {
                                         <ItemsControl ItemsSource="{Binding Locations}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <TextBlock Text="{Binding}" Foreground="$textSecondary" Margin="20,2,0,2"
-                                                               Cursor="Hand" TextDecorations="Underline"
-                                                               MouseLeftButtonUp="DuplicatePath_Click"/>
+                                                    <TextBlock Text="{Binding}" Foreground="$textSecondary" Margin="20,2,0,2"/>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -1304,7 +1224,6 @@ function Show-MainWindow {
     $lstDuplicates = $window.FindName("lstDuplicates")
     $txtDuplicatesInfo = $window.FindName("txtDuplicatesInfo")
     $txtLog = $window.FindName("txtLog")
-    $txtSearchTop20 = $window.FindName("txtSearchTop20")
     $chkTmp = $window.FindName("chkTmp")
     $chkLog = $window.FindName("chkLog")
     $chkBak = $window.FindName("chkBak")
@@ -1366,9 +1285,8 @@ function Show-MainWindow {
 
     # Fonction pour mettre a jour l'UI avec les resultats
     $updateUI = {
-        param([AnalysisResults]$results)
+        param([PSCustomObject]$results)
 
-        # Vue d'ensemble
         $txtTotalSize.Text = $results.TotalSizeFormatted
         $txtTotalFiles.Text = $results.TotalFiles.ToString('N0')
         $txtTotalFolders.Text = $results.TotalFolders.ToString('N0')
@@ -1397,6 +1315,7 @@ function Show-MainWindow {
         # Doublons
         $lstDuplicates.ItemsSource = $results.Duplicates
         $totalWasted = ($results.Duplicates | Measure-Object -Property WastedSpace -Sum).Sum
+        if ($null -eq $totalWasted) { $totalWasted = 0 }
         $txtDuplicatesInfo.Text = "$($results.Duplicates.Count) groupes de doublons detectes - Espace gaspille: $(Format-FileSize -Bytes $totalWasted)"
     }
 
@@ -1429,79 +1348,6 @@ function Show-MainWindow {
 
         $filters = & $getFilters
 
-        # Creer un runspace pour l'analyse en arriere-plan
-        $runspace = [runspacefactory]::CreateRunspace()
-        $runspace.ApartmentState = "STA"
-        $runspace.ThreadOptions = "ReuseThread"
-        $runspace.Open()
-
-        $runspace.SessionStateProxy.SetVariable("path", $path)
-        $runspace.SessionStateProxy.SetVariable("filters", $filters)
-        $runspace.SessionStateProxy.SetVariable("window", $window)
-        $runspace.SessionStateProxy.SetVariable("updateUI", $updateUI)
-        $runspace.SessionStateProxy.SetVariable("addLog", $addLog)
-
-        $powershell = [powershell]::Create()
-        $powershell.Runspace = $runspace
-
-        [void]$powershell.AddScript({
-            param($path, $filters)
-
-            . {
-                # Re-definir les classes et fonctions necessaires dans le runspace
-                # (Le code serait normalement module ou dot-source)
-            }
-
-            $progressCallback = {
-                param($currentFolder, $filesScanned)
-                $window.Dispatcher.Invoke([Action]{
-                    $txtCurrentFolder = $window.FindName("txtCurrentFolder")
-                    $txtProgress = $window.FindName("txtProgress")
-                    $txtCurrentFolder.Text = $currentFolder
-                    $txtProgress.Text = "$filesScanned fichiers analyses"
-                })
-            }
-
-            try {
-                $results = Start-Analysis -RootPath $path -ProgressCallback $progressCallback -Filters $filters
-
-                $window.Dispatcher.Invoke([Action]{
-                    & $updateUI $results
-                    $Script:AnalysisResults = $results
-
-                    $txtStatus = $window.FindName("txtStatus")
-                    $progressBar = $window.FindName("progressBar")
-                    $btnAnalyze = $window.FindName("btnAnalyze")
-                    $btnExport = $window.FindName("btnExport")
-                    $btnCancel = $window.FindName("btnCancel")
-
-                    $txtStatus.Text = "Analyse terminee"
-                    $progressBar.Visibility = "Collapsed"
-                    $btnAnalyze.IsEnabled = $true
-                    $btnExport.IsEnabled = $true
-                    $btnCancel.IsEnabled = $false
-
-                    & $addLog "Analyse terminee: $($results.TotalFiles) fichiers, $($results.TotalSizeFormatted)"
-                })
-            } catch {
-                $window.Dispatcher.Invoke([Action]{
-                    $txtStatus = $window.FindName("txtStatus")
-                    $btnAnalyze = $window.FindName("btnAnalyze")
-                    $progressBar = $window.FindName("progressBar")
-
-                    $txtStatus.Text = "Erreur lors de l'analyse"
-                    $btnAnalyze.IsEnabled = $true
-                    $progressBar.Visibility = "Collapsed"
-
-                    & $addLog "Erreur: $($_.Exception.Message)"
-                })
-            }
-        })
-
-        $powershell.AddArgument($path)
-        $powershell.AddArgument($filters)
-
-        # Lancer l'analyse de maniere synchrone pour simplifier (en production, utiliser BeginInvoke)
         try {
             $results = Start-Analysis -RootPath $path -ProgressCallback {
                 param($currentFolder, $filesScanned)
@@ -1519,8 +1365,8 @@ function Show-MainWindow {
             & $addLog "$($results.Duplicates.Count) groupes de doublons detectes"
             & $addLog "$($results.Errors.Count) erreurs rencontrees"
 
-            foreach ($error in $results.Errors | Select-Object -First 10) {
-                & $addLog "  - $error"
+            foreach ($err in $results.Errors | Select-Object -First 10) {
+                & $addLog "  - $err"
             }
             if ($results.Errors.Count -gt 10) {
                 & $addLog "  ... et $($results.Errors.Count - 10) autres erreurs"
@@ -1533,7 +1379,7 @@ function Show-MainWindow {
         } finally {
             $progressBar.Visibility = "Collapsed"
             $btnAnalyze.IsEnabled = $true
-            $btnExport.IsEnabled = ($Script:AnalysisResults -ne $null)
+            $btnExport.IsEnabled = ($null -ne $Script:AnalysisResults)
             $btnCancel.IsEnabled = $false
         }
     })
@@ -1565,7 +1411,6 @@ function Show-MainWindow {
             & $addLog "Rapport genere: $filePath"
             $txtStatus.Text = "Rapport exporte"
 
-            # Ouvrir dans le navigateur
             Start-Process $filePath
 
             [System.Windows.MessageBox]::Show("Rapport genere avec succes:`n$filePath", "Export reussi", "OK", "Information")
@@ -1639,19 +1484,16 @@ function Show-MainWindow {
 
 #region Point d'entree principal
 
-# Verifier les prerequis
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     Write-Error "PowerShell 5.1 ou superieur est requis."
     exit 1
 }
 
-# Verifier que le chemin existe
 if (-not (Test-Path $Path)) {
     Write-Error "Le chemin specifie n'existe pas: $Path"
     exit 1
 }
 
-# Lancer l'interface
 Show-MainWindow -AnalysisPath $Path
 
 #endregion
