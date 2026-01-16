@@ -35,12 +35,14 @@ param(
 )
 
 #region Configuration et Variables Globales
-$Script:Version = "1.1"
+$Script:Version = "1.3"
 $Script:AppName = "Analyseur d'Espace Disque"
+$Script:CompanyName = "Mon Entreprise"
 $Script:AnalysisResults = $null
 $Script:CancelRequested = $false
 $Script:TotalFilesScanned = 0
 $Script:TotalSize = 0
+$Script:ForcedTheme = $null  # $null = auto, "Light" ou "Dark"
 #endregion
 
 #region Chargement des Assemblies
@@ -164,6 +166,11 @@ function Format-FileSize {
 }
 
 function Get-SystemTheme {
+    # Si un theme est force, l'utiliser
+    if ($Script:ForcedTheme) {
+        return $Script:ForcedTheme
+    }
+    # Sinon, detecter le theme systeme
     try {
         $regPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
         $value = Get-ItemPropertyValue -Path $regPath -Name "AppsUseLightTheme" -ErrorAction SilentlyContinue
@@ -861,6 +868,7 @@ function Show-MainWindow {
         $successColor = "#75b798"    # Vert
         $warningColor = "#ffda6a"    # Jaune
         $dangerColor = "#ea868f"     # Rouge clair
+        $themeIcon = "☀"            # Icone soleil (pour passer en clair)
     } else {
         # Theme Clair - couleurs classiques
         $bgPrimary = "#ffffff"       # Fond principal (blanc)
@@ -874,6 +882,7 @@ function Show-MainWindow {
         $successColor = "#198754"    # Vert
         $warningColor = "#ffc107"    # Jaune
         $dangerColor = "#dc3545"     # Rouge
+        $themeIcon = "☾"            # Icone lune (pour passer en sombre)
     }
 
     $xaml = @"
@@ -1010,17 +1019,40 @@ function Show-MainWindow {
 
         <!-- Barre d'outils -->
         <Border Grid.Row="0" Background="$bgSecondary" Padding="15" BorderBrush="$borderColor" BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal">
-                <Button x:Name="btnAnalyze" Content="Analyser" Style="{StaticResource ModernButton}" Margin="0,0,10,0"/>
-                <Button x:Name="btnExport" Content="Exporter HTML" Style="{StaticResource ModernButton}" Margin="0,0,10,0" IsEnabled="False"/>
-                <Button x:Name="btnCancel" Content="Annuler" Style="{StaticResource DangerButton}" Margin="0,0,10,0" IsEnabled="False"/>
-                <Separator Margin="10,0" Background="$borderColor"/>
-                <TextBlock Text="Chemin:" VerticalAlignment="Center" Foreground="$textSecondary" Margin="0,0,10,0"/>
-                <TextBox x:Name="txtPath" Width="400" Padding="8" Background="$bgPrimary" Foreground="$textPrimary"
-                         BorderBrush="$borderColor" BorderThickness="1" VerticalContentAlignment="Center"
-                         Text="$AnalysisPath"/>
-                <Button x:Name="btnBrowse" Content="..." Style="{StaticResource ModernButton}" Margin="5,0,0,0" Padding="10,8"/>
-            </StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Partie gauche : boutons et chemin -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Button x:Name="btnAnalyze" Content="Analyser" Style="{StaticResource ModernButton}" Margin="0,0,10,0"/>
+                    <Button x:Name="btnExport" Content="Exporter HTML" Style="{StaticResource ModernButton}" Margin="0,0,10,0" IsEnabled="False"/>
+                    <Button x:Name="btnCancel" Content="Annuler" Style="{StaticResource DangerButton}" Margin="0,0,10,0" IsEnabled="False"/>
+                    <Separator Margin="10,0" Background="$borderColor"/>
+                    <TextBlock Text="Chemin:" VerticalAlignment="Center" Foreground="$textSecondary" Margin="0,0,10,0"/>
+                    <TextBox x:Name="txtPath" Width="350" Padding="8" Background="$bgPrimary" Foreground="$textPrimary"
+                             BorderBrush="$borderColor" BorderThickness="1" VerticalContentAlignment="Center"
+                             Text="$AnalysisPath"/>
+                    <Button x:Name="btnBrowse" Content="..." Style="{StaticResource ModernButton}" Margin="5,0,0,0" Padding="10,8"/>
+                </StackPanel>
+
+                <!-- Partie droite : theme et signature -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="btnToggleTheme" Style="{StaticResource SecondaryButton}" Margin="0,0,15,0" Padding="10,8" ToolTip="Changer de theme">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="$themeIcon" FontSize="14" Margin="0,0,5,0"/>
+                            <TextBlock Text="Theme"/>
+                        </StackPanel>
+                    </Button>
+                    <Separator Margin="0,0,15,0" Background="$borderColor"/>
+                    <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                        <TextBlock Text="$($Script:CompanyName)" FontWeight="Bold" Foreground="$accentColor" FontSize="12"/>
+                        <TextBlock Text="DiskSpaceAnalyzer v$($Script:Version)" Foreground="$textMuted" FontSize="10"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!-- Contenu principal avec onglets -->
@@ -1247,6 +1279,105 @@ function Show-MainWindow {
                 </ScrollViewer>
             </TabItem>
 
+            <!-- Onglet Nettoyage -->
+            <TabItem Header="Nettoyage" Style="{StaticResource TabStyle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20">
+                        <!-- Avertissement -->
+                        <Border Background="$warningColor" Padding="15" CornerRadius="8" Margin="0,0,0,20">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⚠" FontSize="20" Margin="0,0,10,0" Foreground="#1a1a1a"/>
+                                <TextBlock Text="Attention : Le nettoyage supprime definitivement les fichiers. Les mots de passe et donnees personnelles des navigateurs sont preserves."
+                                           Foreground="#1a1a1a" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Navigateurs -->
+                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Cache des Navigateurs" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                <TextBlock Text="Supprime le cache, les cookies de session et fichiers temporaires (conserve mots de passe et favoris)"
+                                           Foreground="$textSecondary" Margin="0,0,0,15" TextWrapping="Wrap"/>
+                                <StackPanel Margin="10,0,0,0">
+                                    <CheckBox x:Name="chkEdgeCache" Content="Microsoft Edge (Chromium)" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkFirefoxCache" Content="Mozilla Firefox" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkChromeCache" Content="Google Chrome" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Fichiers temporaires Windows -->
+                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Fichiers Temporaires Windows" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                <TextBlock Text="Nettoie les dossiers temporaires du systeme"
+                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
+                                <StackPanel Margin="10,0,0,0">
+                                    <CheckBox x:Name="chkUserTemp" Content="Dossier Temp utilisateur (%TEMP%)" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkWindowsTemp" Content="Dossier Temp Windows (C:\Windows\Temp)" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkPrefetch" Content="Prefetch (C:\Windows\Prefetch)" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Cache systeme -->
+                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Cache Systeme" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                <TextBlock Text="Nettoie les caches Windows non essentiels"
+                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
+                                <StackPanel Margin="10,0,0,0">
+                                    <CheckBox x:Name="chkThumbnails" Content="Cache des miniatures (Thumbnails)" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkIconCache" Content="Cache des icones" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkFontCache" Content="Cache des polices" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Fichiers divers -->
+                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Autres Nettoyages" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                <TextBlock Text="Fichiers supplementaires pouvant etre supprimes"
+                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
+                                <StackPanel Margin="10,0,0,0">
+                                    <CheckBox x:Name="chkRecycleBin" Content="Vider la Corbeille" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkRecentDocs" Content="Historique des documents recents" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkLogFiles" Content="Fichiers journaux (.log) de plus de 30 jours" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkCrashDumps" Content="Rapports d'erreurs Windows" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Boutons d'action -->
+                        <Border Background="$bgTertiary" Padding="20" CornerRadius="10" Margin="0,0,0,15">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="txtCleanupEstimate" Text="Selectionnez les elements a nettoyer" Foreground="$textPrimary" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="txtCleanupDetails" Text="" Foreground="$textSecondary" FontSize="12"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button x:Name="btnEstimateCleanup" Content="Estimer" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0"/>
+                                    <Button x:Name="btnRunCleanup" Content="Nettoyer" Style="{StaticResource DangerButton}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Resultat du nettoyage -->
+                        <Border x:Name="borderCleanupResult" Background="$bgSecondary" Padding="15" CornerRadius="8" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock x:Name="txtCleanupResult" Text="" Foreground="$successColor" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="txtCleanupResultDetails" Text="" Foreground="$textSecondary" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- Onglet Journal -->
             <TabItem Header="Journal" Style="{StaticResource TabStyle}">
                 <Grid Margin="20">
@@ -1304,6 +1435,7 @@ function Show-MainWindow {
     $btnApplyFilters = $window.FindName("btnApplyFilters")
     $btnResetFilters = $window.FindName("btnResetFilters")
     $btnClearLog = $window.FindName("btnClearLog")
+    $btnToggleTheme = $window.FindName("btnToggleTheme")
     $txtPath = $window.FindName("txtPath")
     $txtStatus = $window.FindName("txtStatus")
     $txtCurrentFolder = $window.FindName("txtCurrentFolder")
@@ -1328,6 +1460,28 @@ function Show-MainWindow {
     $txtOlderThan = $window.FindName("txtOlderThan")
     $txtCustomExtensions = $window.FindName("txtCustomExtensions")
     $txtCustomFolders = $window.FindName("txtCustomFolders")
+
+    # Controles de l'onglet Nettoyage
+    $chkEdgeCache = $window.FindName("chkEdgeCache")
+    $chkFirefoxCache = $window.FindName("chkFirefoxCache")
+    $chkChromeCache = $window.FindName("chkChromeCache")
+    $chkUserTemp = $window.FindName("chkUserTemp")
+    $chkWindowsTemp = $window.FindName("chkWindowsTemp")
+    $chkPrefetch = $window.FindName("chkPrefetch")
+    $chkThumbnails = $window.FindName("chkThumbnails")
+    $chkIconCache = $window.FindName("chkIconCache")
+    $chkFontCache = $window.FindName("chkFontCache")
+    $chkRecycleBin = $window.FindName("chkRecycleBin")
+    $chkRecentDocs = $window.FindName("chkRecentDocs")
+    $chkLogFiles = $window.FindName("chkLogFiles")
+    $chkCrashDumps = $window.FindName("chkCrashDumps")
+    $btnEstimateCleanup = $window.FindName("btnEstimateCleanup")
+    $btnRunCleanup = $window.FindName("btnRunCleanup")
+    $txtCleanupEstimate = $window.FindName("txtCleanupEstimate")
+    $txtCleanupDetails = $window.FindName("txtCleanupDetails")
+    $borderCleanupResult = $window.FindName("borderCleanupResult")
+    $txtCleanupResult = $window.FindName("txtCleanupResult")
+    $txtCleanupResultDetails = $window.FindName("txtCleanupResultDetails")
 
     # Fonction pour ajouter au journal
     $addLog = {
@@ -1415,6 +1569,204 @@ function Show-MainWindow {
         $totalWasted = ($results.Duplicates | Measure-Object -Property WastedSpace -Sum).Sum
         if ($null -eq $totalWasted) { $totalWasted = 0 }
         $txtDuplicatesInfo.Text = "$($results.Duplicates.Count) groupes de doublons detectes - Espace gaspille: $(Format-FileSize -Bytes $totalWasted)"
+    }
+
+    # Fonction pour obtenir les chemins de nettoyage selon les options cochees
+    $getCleanupPaths = {
+        $paths = New-Object System.Collections.ArrayList
+
+        # Cache Edge Chromium (conserve mots de passe et favoris)
+        if ($chkEdgeCache.IsChecked) {
+            $edgePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default"
+            @("Cache", "Code Cache", "GPUCache", "Service Worker\CacheStorage", "Service Worker\ScriptCache") | ForEach-Object {
+                $p = Join-Path $edgePath $_
+                if (Test-Path $p) { [void]$paths.Add(@{ Path = $p; Category = "Edge"; Name = $_ }) }
+            }
+        }
+
+        # Cache Firefox (conserve mots de passe et favoris)
+        if ($chkFirefoxCache.IsChecked) {
+            $firefoxPath = "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles"
+            if (Test-Path $firefoxPath) {
+                Get-ChildItem $firefoxPath -Directory | ForEach-Object {
+                    $profilePath = $_.FullName
+                    @("cache2", "startupCache", "thumbnails") | ForEach-Object {
+                        $p = Join-Path $profilePath $_
+                        if (Test-Path $p) { [void]$paths.Add(@{ Path = $p; Category = "Firefox"; Name = $_ }) }
+                    }
+                }
+            }
+        }
+
+        # Cache Chrome (conserve mots de passe et favoris)
+        if ($chkChromeCache.IsChecked) {
+            $chromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
+            @("Cache", "Code Cache", "GPUCache", "Service Worker\CacheStorage", "Service Worker\ScriptCache") | ForEach-Object {
+                $p = Join-Path $chromePath $_
+                if (Test-Path $p) { [void]$paths.Add(@{ Path = $p; Category = "Chrome"; Name = $_ }) }
+            }
+        }
+
+        # Temp utilisateur
+        if ($chkUserTemp.IsChecked) {
+            $tempPath = $env:TEMP
+            if (Test-Path $tempPath) { [void]$paths.Add(@{ Path = $tempPath; Category = "Windows"; Name = "Temp utilisateur" }) }
+        }
+
+        # Temp Windows
+        if ($chkWindowsTemp.IsChecked) {
+            $winTemp = "C:\Windows\Temp"
+            if (Test-Path $winTemp) { [void]$paths.Add(@{ Path = $winTemp; Category = "Windows"; Name = "Temp Windows" }) }
+        }
+
+        # Prefetch
+        if ($chkPrefetch.IsChecked) {
+            $prefetch = "C:\Windows\Prefetch"
+            if (Test-Path $prefetch) { [void]$paths.Add(@{ Path = $prefetch; Category = "Windows"; Name = "Prefetch" }) }
+        }
+
+        # Cache miniatures
+        if ($chkThumbnails.IsChecked) {
+            $thumbs = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"
+            if (Test-Path $thumbs) { [void]$paths.Add(@{ Path = $thumbs; Category = "Cache"; Name = "Miniatures"; Pattern = "thumbcache_*.db" }) }
+        }
+
+        # Cache icones
+        if ($chkIconCache.IsChecked) {
+            $iconCache = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\iconcache_*.db"
+            [void]$paths.Add(@{ Path = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"; Category = "Cache"; Name = "Icones"; Pattern = "iconcache_*.db" })
+        }
+
+        # Cache polices
+        if ($chkFontCache.IsChecked) {
+            $fontCache = "C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache"
+            if (Test-Path $fontCache) { [void]$paths.Add(@{ Path = $fontCache; Category = "Cache"; Name = "Polices" }) }
+        }
+
+        # Documents recents
+        if ($chkRecentDocs.IsChecked) {
+            $recent = "$env:APPDATA\Microsoft\Windows\Recent"
+            if (Test-Path $recent) { [void]$paths.Add(@{ Path = $recent; Category = "Historique"; Name = "Documents recents" }) }
+        }
+
+        # Fichiers log anciens
+        if ($chkLogFiles.IsChecked) {
+            [void]$paths.Add(@{ Path = $env:USERPROFILE; Category = "Logs"; Name = "Fichiers log anciens"; Pattern = "*.log"; MaxAge = 30 })
+        }
+
+        # Rapports d'erreurs
+        if ($chkCrashDumps.IsChecked) {
+            $wer = "$env:LOCALAPPDATA\CrashDumps"
+            if (Test-Path $wer) { [void]$paths.Add(@{ Path = $wer; Category = "Erreurs"; Name = "Crash dumps" }) }
+            $werReports = "$env:LOCALAPPDATA\Microsoft\Windows\WER"
+            if (Test-Path $werReports) { [void]$paths.Add(@{ Path = $werReports; Category = "Erreurs"; Name = "Rapports WER" }) }
+        }
+
+        return $paths
+    }
+
+    # Fonction pour estimer l'espace a liberer
+    $estimateCleanup = {
+        $paths = & $getCleanupPaths
+        $totalSize = 0
+        $details = New-Object System.Collections.ArrayList
+
+        foreach ($item in $paths) {
+            $size = 0
+            try {
+                if ($item.Pattern) {
+                    if ($item.MaxAge) {
+                        $cutoffDate = (Get-Date).AddDays(-$item.MaxAge)
+                        $files = Get-ChildItem -Path $item.Path -Filter $item.Pattern -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt $cutoffDate }
+                    } else {
+                        $files = Get-ChildItem -Path $item.Path -Filter $item.Pattern -File -ErrorAction SilentlyContinue
+                    }
+                    $size = ($files | Measure-Object -Property Length -Sum).Sum
+                } else {
+                    $size = (Get-ChildItem -Path $item.Path -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                }
+            } catch {
+                # Ignorer les erreurs d'acces
+            }
+            if ($null -eq $size) { $size = 0 }
+            $totalSize += $size
+            if ($size -gt 0) {
+                [void]$details.Add("$($item.Category)/$($item.Name): $(Format-FileSize -Bytes $size)")
+            }
+        }
+
+        return @{
+            TotalSize = $totalSize
+            TotalSizeFormatted = Format-FileSize -Bytes $totalSize
+            Details = $details
+        }
+    }
+
+    # Fonction pour effectuer le nettoyage
+    $runCleanup = {
+        $paths = & $getCleanupPaths
+        $totalFreed = 0
+        $filesDeleted = 0
+        $errors = New-Object System.Collections.ArrayList
+
+        # Vider la corbeille si demande
+        if ($chkRecycleBin.IsChecked) {
+            try {
+                $shell = New-Object -ComObject Shell.Application
+                $recycleBin = $shell.Namespace(0xA)
+                $recycleCount = $recycleBin.Items().Count
+                if ($recycleCount -gt 0) {
+                    Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+                    & $addLog "Corbeille videe ($recycleCount elements)"
+                }
+            } catch {
+                [void]$errors.Add("Corbeille: $($_.Exception.Message)")
+            }
+        }
+
+        foreach ($item in $paths) {
+            try {
+                if ($item.Pattern) {
+                    if ($item.MaxAge) {
+                        $cutoffDate = (Get-Date).AddDays(-$item.MaxAge)
+                        $files = Get-ChildItem -Path $item.Path -Filter $item.Pattern -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt $cutoffDate }
+                    } else {
+                        $files = Get-ChildItem -Path $item.Path -Filter $item.Pattern -File -ErrorAction SilentlyContinue
+                    }
+                    foreach ($file in $files) {
+                        try {
+                            $totalFreed += $file.Length
+                            Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                            $filesDeleted++
+                        } catch {
+                            [void]$errors.Add("$($file.Name): $($_.Exception.Message)")
+                        }
+                    }
+                } else {
+                    $files = Get-ChildItem -Path $item.Path -Recurse -File -ErrorAction SilentlyContinue
+                    foreach ($file in $files) {
+                        try {
+                            $totalFreed += $file.Length
+                            Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                            $filesDeleted++
+                        } catch {
+                            [void]$errors.Add("$($file.Name): $($_.Exception.Message)")
+                        }
+                    }
+                }
+                & $addLog "Nettoye: $($item.Category)/$($item.Name)"
+            } catch {
+                [void]$errors.Add("$($item.Name): $($_.Exception.Message)")
+                & $addLog "Erreur nettoyage $($item.Name): $($_.Exception.Message)"
+            }
+        }
+
+        return @{
+            TotalFreed = $totalFreed
+            TotalFreedFormatted = Format-FileSize -Bytes $totalFreed
+            FilesDeleted = $filesDeleted
+            Errors = $errors
+        }
     }
 
     # Event: Parcourir
@@ -1543,6 +1895,93 @@ function Show-MainWindow {
         $txtLog.Clear()
     })
 
+    # Event: Estimer nettoyage
+    $btnEstimateCleanup.Add_Click({
+        $txtCleanupEstimate.Text = "Estimation en cours..."
+        $txtCleanupDetails.Text = ""
+        $borderCleanupResult.Visibility = "Collapsed"
+
+        & $addLog "Estimation du nettoyage..."
+
+        try {
+            $estimate = & $estimateCleanup
+            $txtCleanupEstimate.Text = "Espace a liberer: $($estimate.TotalSizeFormatted)"
+            $txtCleanupDetails.Text = ($estimate.Details -join " | ")
+            & $addLog "Estimation terminee: $($estimate.TotalSizeFormatted)"
+        } catch {
+            $txtCleanupEstimate.Text = "Erreur lors de l'estimation"
+            & $addLog "Erreur estimation: $($_.Exception.Message)"
+        }
+    })
+
+    # Event: Lancer nettoyage
+    $btnRunCleanup.Add_Click({
+        # Verifier qu'au moins une option est cochee
+        $anyChecked = $chkEdgeCache.IsChecked -or $chkFirefoxCache.IsChecked -or $chkChromeCache.IsChecked -or
+                      $chkUserTemp.IsChecked -or $chkWindowsTemp.IsChecked -or $chkPrefetch.IsChecked -or
+                      $chkThumbnails.IsChecked -or $chkIconCache.IsChecked -or $chkFontCache.IsChecked -or
+                      $chkRecycleBin.IsChecked -or $chkRecentDocs.IsChecked -or $chkLogFiles.IsChecked -or $chkCrashDumps.IsChecked
+
+        if (-not $anyChecked) {
+            [System.Windows.MessageBox]::Show("Veuillez selectionner au moins une option de nettoyage.", "Information", "OK", "Information")
+            return
+        }
+
+        $result = [System.Windows.MessageBox]::Show(
+            "Etes-vous sur de vouloir supprimer definitivement les fichiers selectionnes?`n`nCette action est irreversible.",
+            "Confirmation",
+            "YesNo",
+            "Warning"
+        )
+
+        if ($result -ne "Yes") { return }
+
+        $txtCleanupEstimate.Text = "Nettoyage en cours..."
+        $txtCleanupDetails.Text = ""
+        $btnRunCleanup.IsEnabled = $false
+        $btnEstimateCleanup.IsEnabled = $false
+
+        & $addLog "Debut du nettoyage..."
+
+        try {
+            $cleanupResult = & $runCleanup
+
+            $borderCleanupResult.Visibility = "Visible"
+            $txtCleanupResult.Text = "Nettoyage termine avec succes!"
+            $txtCleanupResultDetails.Text = "$($cleanupResult.FilesDeleted) fichiers supprimes - $($cleanupResult.TotalFreedFormatted) liberes"
+
+            if ($cleanupResult.Errors.Count -gt 0) {
+                $txtCleanupResultDetails.Text += "`n$($cleanupResult.Errors.Count) fichiers n'ont pas pu etre supprimes (en cours d'utilisation)"
+            }
+
+            $txtCleanupEstimate.Text = "Selectionnez les elements a nettoyer"
+            $txtCleanupDetails.Text = ""
+
+            & $addLog "Nettoyage termine: $($cleanupResult.FilesDeleted) fichiers, $($cleanupResult.TotalFreedFormatted) liberes"
+
+        } catch {
+            $borderCleanupResult.Visibility = "Visible"
+            $txtCleanupResult.Text = "Erreur lors du nettoyage"
+            $txtCleanupResultDetails.Text = $_.Exception.Message
+            & $addLog "Erreur nettoyage: $($_.Exception.Message)"
+        } finally {
+            $btnRunCleanup.IsEnabled = $true
+            $btnEstimateCleanup.IsEnabled = $true
+        }
+    })
+
+    # Event: Changer de theme
+    $btnToggleTheme.Add_Click({
+        $currentTheme = Get-SystemTheme
+        if ($currentTheme -eq "Dark") {
+            $Script:ForcedTheme = "Light"
+        } else {
+            $Script:ForcedTheme = "Dark"
+        }
+        # Fermer et reouvrir la fenetre avec le nouveau theme
+        $window.Close()
+    })
+
     # Event: Double-clic sur Top 20 pour ouvrir
     $gridTop20.Add_MouseDoubleClick({
         $selected = $gridTop20.SelectedItem
@@ -1592,6 +2031,12 @@ if (-not (Test-Path $Path)) {
     exit 1
 }
 
-Show-MainWindow -AnalysisPath $Path
+# Boucle pour permettre le changement de theme
+$previousTheme = $null
+do {
+    $currentTheme = Get-SystemTheme
+    Show-MainWindow -AnalysisPath $Path
+    # Si le theme a change, on reboucle pour reouvrir avec le nouveau theme
+} while ($Script:ForcedTheme -ne $null -and $previousTheme -ne $Script:ForcedTheme -and ($previousTheme = $Script:ForcedTheme))
 
 #endregion

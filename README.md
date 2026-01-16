@@ -6,10 +6,12 @@ Script PowerShell monolithique qui analyse l'espace disque du profil utilisateur
 
 - **Analyse complete** du repertoire utilisateur avec hierarchie des dossiers
 - **Interface WPF moderne** avec detection automatique du theme systeme (clair/sombre)
-- **6 onglets** : Vue d'ensemble, Hierarchie, Top 20 fichiers, Doublons, Filtres, Journal
+- **Bouton de changement de theme** pour basculer entre mode clair et sombre
+- **7 onglets** : Vue d'ensemble, Hierarchie, Top 20 fichiers, Doublons, Filtres, Nettoyage, Journal
 - **Detection des doublons** par nom et date de modification
 - **Export HTML interactif** avec graphiques Chart.js
 - **Systeme de filtrage** par extensions, taille et date
+- **Nettoyage integre** des caches navigateurs et fichiers temporaires
 - **Integration Explorateur Windows** (double-clic pour ouvrir)
 
 ## Prerequis
@@ -67,11 +69,37 @@ Le rapport HTML genere contient :
 - **Anciennete** : Fichiers non modifies depuis X jours
 - **Dossiers exclus** : AppData\Local\Temp, etc.
 
+## Nettoyage integre
+
+L'onglet Nettoyage permet de liberer de l'espace disque en supprimant :
+
+**Cache des navigateurs** (conserve mots de passe et favoris) :
+- Microsoft Edge (Chromium)
+- Mozilla Firefox
+- Google Chrome
+
+**Fichiers temporaires Windows** :
+- Dossier Temp utilisateur
+- Dossier Temp Windows
+- Prefetch
+
+**Cache systeme** :
+- Cache des miniatures
+- Cache des icones
+- Cache des polices
+
+**Autres** :
+- Corbeille
+- Historique des documents recents
+- Fichiers journaux anciens (> 30 jours)
+- Rapports d'erreurs Windows
+
 ## Capture d'ecran
 
 L'interface s'adapte automatiquement au theme Windows :
 - Theme clair : fond blanc, couleurs vives
 - Theme sombre : fond sombre, couleurs attenuees
+- Bouton de changement de theme en haut a droite
 
 ## Licence
 
@@ -79,4 +107,4 @@ Script libre d'utilisation.
 
 ## Version
 
-1.0 - Janvier 2026
+1.3 - Janvier 2026
