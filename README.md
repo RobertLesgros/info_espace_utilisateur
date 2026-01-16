@@ -6,12 +6,13 @@ Script PowerShell monolithique qui analyse l'espace disque du profil utilisateur
 
 - **Analyse complete** du repertoire utilisateur avec hierarchie des dossiers
 - **Interface WPF moderne** avec detection automatique du theme systeme (clair/sombre)
-- **Bouton de changement de theme** pour basculer entre mode clair et sombre
+- **Detection des droits** : Mode Utilisateur ou Administrateur automatique
 - **7 onglets** : Vue d'ensemble, Hierarchie, Top 20 fichiers, Doublons, Filtres, Nettoyage, Journal
 - **Detection des doublons** par nom et date de modification
 - **Export HTML interactif** avec graphiques Chart.js
 - **Systeme de filtrage** par extensions, taille et date
-- **Nettoyage integre** des caches navigateurs et fichiers temporaires
+- **Nettoyage guide** avec analyse, conseils personnalises puis options de nettoyage
+- **Envoi de rapport par email** automatique apres nettoyage
 - **Integration Explorateur Windows** (double-clic pour ouvrir)
 
 ## Prerequis
@@ -71,28 +72,56 @@ Le rapport HTML genere contient :
 
 ## Nettoyage integre
 
-L'onglet Nettoyage permet de liberer de l'espace disque en supprimant :
+L'onglet Nettoyage propose un parcours guide en 3 etapes :
+
+### Etape 1 : Analyse
+Cliquez sur "Analyser mon profil" pour scanner votre espace utilisateur.
+
+### Etape 2 : Conseils
+Apres analyse, vous recevez des conseils personnalises bases sur l'espace occupe.
+
+### Etape 3 : Nettoyage
+Selectionnez les elements a nettoyer parmi :
 
 **Cache des navigateurs** (conserve mots de passe et favoris) :
 - Microsoft Edge (Chromium)
 - Mozilla Firefox
 - Google Chrome
 
-**Fichiers temporaires Windows** :
+**Fichiers utilisateur** :
 - Dossier Temp utilisateur
+- Cache des miniatures
+- Corbeille
+- Documents recents
+- Fichiers .log anciens
+
+**Dossier Telechargements** :
+- Option speciale avec avertissement
+- Les fichiers sont generalement retelechargea­bles
+- Responsabilite de l'utilisateur
+
+**Options Administrateur** (visibles uniquement avec droits eleves) :
 - Dossier Temp Windows
 - Prefetch
-
-**Cache systeme** :
-- Cache des miniatures
-- Cache des icones
+- Cache des icones systeme
 - Cache des polices
-
-**Autres** :
-- Corbeille
-- Historique des documents recents
-- Fichiers journaux anciens (> 30 jours)
 - Rapports d'erreurs Windows
+
+## Configuration SMTP
+
+Pour l'envoi automatique des rapports par email, modifiez ces variables dans le script :
+
+```powershell
+$Script:SmtpServer = "smtp.entreprise.com"      # Serveur SMTP
+$Script:SmtpPort = 587                           # Port SMTP
+$Script:SmtpUser = "noreply@entreprise.com"     # Login SMTP
+$Script:SmtpPassword = "MotDePasseSMTP"         # Mot de passe SMTP
+$Script:SmtpTo = "admin-it@entreprise.com"      # Destinataire
+$Script:SmtpFrom = "noreply@entreprise.com"     # Expediteur
+$Script:SmtpUseSsl = $true                       # Utiliser SSL/TLS
+```
+
+Le sujet de l'email contient : Nom de l'ordinateur + Nom d'utilisateur
 
 ## Capture d'ecran
 
@@ -106,6 +135,14 @@ L'interface s'adapte automatiquement au theme Windows :
 Script libre d'utilisation.
 
 ## Version
+
+1.5 - Janvier 2026
+- Detection automatique des droits (Utilisateur vs Administrateur)
+- Mode Utilisateur : chemin et filtres verrouilles sur le profil
+- Nouveau parcours guide : Analyser > Conseils > Nettoyage
+- Ajout du nettoyage du dossier Telechargements avec avertissement
+- Envoi automatique du rapport par email apres nettoyage
+- Conseils personnalises selon l'espace occupe
 
 1.4 - Janvier 2026
 - Separation des actions utilisateur/administrateur dans l'onglet Nettoyage

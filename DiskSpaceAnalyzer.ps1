@@ -35,7 +35,7 @@ param(
 )
 
 #region Configuration et Variables Globales
-$Script:Version = "1.4"
+$Script:Version = "1.5"
 $Script:AppName = "Analyseur d'Espace Disque"
 $Script:CompanyName = "Mon Entreprise"
 $Script:AnalysisResults = $null
@@ -43,6 +43,20 @@ $Script:CancelRequested = $false
 $Script:TotalFilesScanned = 0
 $Script:TotalSize = 0
 $Script:ForcedTheme = $null  # $null = auto, "Light" ou "Dark"
+$Script:IsAdmin = $false     # Sera defini au demarrage
+
+# ============================================
+# CONFIGURATION SMTP - A MODIFIER PAR L'ADMIN
+# ============================================
+$Script:SmtpServer = "smtp.entreprise.com"      # Serveur SMTP
+$Script:SmtpPort = 587                           # Port SMTP (25, 465, 587)
+$Script:SmtpUser = "noreply@entreprise.com"     # Login SMTP
+$Script:SmtpPassword = "MotDePasseSMTP"         # Mot de passe SMTP
+$Script:SmtpTo = "admin-it@entreprise.com"      # Destinataire des rapports
+$Script:SmtpFrom = "noreply@entreprise.com"     # Expediteur
+$Script:SmtpUseSsl = $true                       # Utiliser SSL/TLS
+# ============================================
+
 #endregion
 
 #region Chargement des Assemblies
@@ -51,6 +65,95 @@ Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Web
+#endregion
+
+#region Fonctions Systeme
+
+# Detecte si l'utilisateur a des droits administrateur (local ou domaine)
+function Test-IsAdmin {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+
+    # Verifier admin local
+    $isLocalAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+    # Verifier admin domaine (Domain Admins, Enterprise Admins)
+    $isDomainAdmin = $false
+    try {
+        $isDomainAdmin = $principal.IsInRole("Domain Admins") -or
+                         $principal.IsInRole("Enterprise Admins") -or
+                         $principal.IsInRole("Administrateurs du domaine") -or
+                         $principal.IsInRole("Admins du domaine")
+    } catch {
+        # Pas dans un domaine ou erreur - ignorer
+    }
+
+    return ($isLocalAdmin -or $isDomainAdmin)
+}
+
+# Envoie un email avec le log de nettoyage
+function Send-CleanupReport {
+    param(
+        [string]$LogContent,
+        [string]$CleanupSummary
+    )
+
+    $computerName = $env:COMPUTERNAME
+    $userName = $env:USERNAME
+    $dateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    $subject = "Nettoyage Disque - $computerName - $userName"
+
+    $body = @"
+RAPPORT DE NETTOYAGE DISQUE
+============================
+Ordinateur: $computerName
+Utilisateur: $userName
+Date: $dateTime
+Mode: $(if ($Script:IsAdmin) { "Administrateur" } else { "Utilisateur" })
+
+RESUME DU NETTOYAGE
+-------------------
+$CleanupSummary
+
+JOURNAL COMPLET
+---------------
+$LogContent
+"@
+
+    try {
+        $smtpClient = New-Object System.Net.Mail.SmtpClient($Script:SmtpServer, $Script:SmtpPort)
+        $smtpClient.EnableSsl = $Script:SmtpUseSsl
+        $smtpClient.Credentials = New-Object System.Net.NetworkCredential($Script:SmtpUser, $Script:SmtpPassword)
+
+        $mailMessage = New-Object System.Net.Mail.MailMessage
+        $mailMessage.From = $Script:SmtpFrom
+        $mailMessage.To.Add($Script:SmtpTo)
+        $mailMessage.Subject = $subject
+        $mailMessage.Body = $body
+        $mailMessage.IsBodyHtml = $false
+
+        $smtpClient.Send($mailMessage)
+
+        return @{ Success = $true; Message = "Email envoye avec succes a $($Script:SmtpTo)" }
+    } catch {
+        return @{ Success = $false; Message = "Erreur envoi email: $($_.Exception.Message)" }
+    } finally {
+        if ($mailMessage) { $mailMessage.Dispose() }
+        if ($smtpClient) { $smtpClient.Dispose() }
+    }
+}
+
+# Obtenir le chemin du dossier Telechargements
+function Get-DownloadsPath {
+    $shell = New-Object -ComObject Shell.Application
+    $downloads = $shell.Namespace('shell:Downloads')
+    if ($downloads) {
+        return $downloads.Self.Path
+    }
+    return Join-Path $env:USERPROFILE "Downloads"
+}
+
 #endregion
 
 #region Fonctions de Creation d'Objets
@@ -1283,70 +1386,131 @@ function Show-MainWindow {
             <TabItem Header="Nettoyage" Style="{StaticResource TabStyle}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="20">
-                        <!-- Avertissement -->
-                        <Border Background="$warningColor" Padding="15" CornerRadius="8" Margin="0,0,0,20">
+                        <!-- Mode de fonctionnement -->
+                        <Border x:Name="borderModeInfo" Background="$accentColor" Padding="12" CornerRadius="8" Margin="0,0,0,15">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="⚠" FontSize="20" Margin="0,0,10,0" Foreground="#1a1a1a"/>
-                                <TextBlock Text="Attention : Le nettoyage supprime definitivement les fichiers. Les mots de passe et donnees personnelles des navigateurs sont preserves."
-                                           Foreground="#1a1a1a" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="txtModeIcon" Text="👤" FontSize="18" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="txtModeTitle" Text="Mode Utilisateur" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock x:Name="txtModeDesc" Text="Analyse limitee a votre profil utilisateur" Foreground="White" Opacity="0.9" FontSize="12"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
-                        <!-- Section Utilisateur -->
-                        <Border Background="$accentColor" Padding="8,5" CornerRadius="5" HorizontalAlignment="Left" Margin="0,0,0,10">
-                            <TextBlock Text="👤 Actions Utilisateur" FontWeight="SemiBold" Foreground="White"/>
-                        </Border>
-
-                        <!-- Navigateurs (Utilisateur) -->
+                        <!-- ETAPE 1: Analyse -->
                         <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="Cache des Navigateurs" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
-                                <TextBlock Text="Supprime le cache, les cookies de session et fichiers temporaires (conserve mots de passe et favoris)"
-                                           Foreground="$textSecondary" Margin="0,0,0,15" TextWrapping="Wrap"/>
-                                <StackPanel Margin="10,0,0,0">
-                                    <CheckBox x:Name="chkEdgeCache" Content="Microsoft Edge (Chromium)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkFirefoxCache" Content="Mozilla Firefox" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkChromeCache" Content="Google Chrome" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <Border Background="$accentColor" Width="28" Height="28" CornerRadius="14">
+                                        <TextBlock Text="1" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="Analyser l'espace disque" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="10,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
+                                <TextBlock Text="Lancez d'abord une analyse pour identifier les fichiers nettoyables et obtenir des recommandations personnalisees."
+                                           Foreground="$textSecondary" TextWrapping="Wrap" Margin="38,0,0,15"/>
+                                <Button x:Name="btnAnalyzeForCleanup" Content="Analyser mon profil" Style="{StaticResource ModernButton}" HorizontalAlignment="Left" Margin="38,0,0,0"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Fichiers utilisateur -->
-                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
+                        <!-- ETAPE 2: Resultats et conseils (cache au depart) -->
+                        <Border x:Name="borderCleanupAnalysis" Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$successColor" BorderThickness="1" Visibility="Collapsed">
                             <StackPanel>
-                                <TextBlock Text="Fichiers Utilisateur" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
-                                <TextBlock Text="Fichiers temporaires et historique de votre profil"
-                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
-                                <StackPanel Margin="10,0,0,0">
-                                    <CheckBox x:Name="chkUserTemp" Content="Dossier Temp utilisateur (%TEMP%)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkThumbnails" Content="Cache des miniatures (Thumbnails)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkRecycleBin" Content="Vider la Corbeille" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkRecentDocs" Content="Historique des documents recents" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkLogFiles" Content="Fichiers journaux (.log) de plus de 30 jours" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <Border Background="$successColor" Width="28" Height="28" CornerRadius="14">
+                                        <TextBlock Text="2" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="Resultat de l'analyse" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="10,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
+
+                                <!-- Statistiques -->
+                                <Border Background="$bgTertiary" Padding="15" CornerRadius="8" Margin="38,0,0,15">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="txtCleanupTotalSize" Text="--" FontSize="24" FontWeight="Bold" Foreground="$accentColor" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Espace occupe" Foreground="$textSecondary" FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="txtCleanupTotalFiles" Text="--" FontSize="24" FontWeight="Bold" Foreground="$accentColor" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Fichiers" Foreground="$textSecondary" FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="txtCleanupPotential" Text="--" FontSize="24" FontWeight="Bold" Foreground="$successColor" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="A recuperer" Foreground="$textSecondary" FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Conseils -->
+                                <TextBlock Text="💡 Conseils personnalises" FontWeight="SemiBold" Foreground="$textPrimary" Margin="38,0,0,8"/>
+                                <Border Background="$bgPrimary" Padding="12" CornerRadius="6" Margin="38,0,0,0">
+                                    <TextBlock x:Name="txtCleanupAdvice" Text="" Foreground="$textSecondary" TextWrapping="Wrap" FontSize="12"/>
+                                </Border>
                             </StackPanel>
                         </Border>
 
-                        <!-- Section Administrateur -->
-                        <Border Background="$dangerColor" Padding="8,5" CornerRadius="5" HorizontalAlignment="Left" Margin="0,15,0,10">
-                            <TextBlock Text="🔒 Actions Administrateur" FontWeight="SemiBold" Foreground="White"/>
-                        </Border>
-                        <TextBlock x:Name="txtAdminWarning" Text="Ces options necessitent des droits administrateur. Certains fichiers peuvent etre ignores si vous n'avez pas les permissions."
-                                   Foreground="$textMuted" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-
-                        <!-- Fichiers systeme (Admin) -->
-                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$dangerColor" BorderThickness="1">
+                        <!-- ETAPE 3: Options de nettoyage (cache au depart) -->
+                        <Border x:Name="borderCleanupOptions" Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1" Visibility="Collapsed">
                             <StackPanel>
-                                <TextBlock Text="Fichiers Systeme Windows" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
-                                <TextBlock Text="Necessite des privileges eleves pour un nettoyage complet"
-                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
-                                <StackPanel Margin="10,0,0,0">
-                                    <CheckBox x:Name="chkWindowsTemp" Content="Dossier Temp Windows (C:\Windows\Temp)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkPrefetch" Content="Prefetch (C:\Windows\Prefetch)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkIconCache" Content="Cache des icones systeme" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkFontCache" Content="Cache des polices" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkCrashDumps" Content="Rapports d'erreurs et crash dumps" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                    <Border Background="$warningColor" Width="28" Height="28" CornerRadius="14">
+                                        <TextBlock Text="3" Foreground="#1a1a1a" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="Selectionner les elements a nettoyer" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="10,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
+
+                                <!-- Cache navigateurs -->
+                                <TextBlock Text="Cache des Navigateurs" FontWeight="SemiBold" Foreground="$textPrimary" Margin="38,0,0,8"/>
+                                <TextBlock Text="Conserve vos mots de passe et favoris" Foreground="$textMuted" FontSize="11" Margin="38,0,0,8"/>
+                                <StackPanel Margin="48,0,0,15">
+                                    <CheckBox x:Name="chkEdgeCache" Content="Microsoft Edge" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                    <CheckBox x:Name="chkFirefoxCache" Content="Mozilla Firefox" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                    <CheckBox x:Name="chkChromeCache" Content="Google Chrome" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                </StackPanel>
+
+                                <!-- Fichiers temporaires utilisateur -->
+                                <TextBlock Text="Fichiers temporaires" FontWeight="SemiBold" Foreground="$textPrimary" Margin="38,0,0,8"/>
+                                <StackPanel Margin="48,0,0,15">
+                                    <CheckBox x:Name="chkUserTemp" Content="Dossier Temp utilisateur" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                    <CheckBox x:Name="chkThumbnails" Content="Cache des miniatures" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                    <CheckBox x:Name="chkRecycleBin" Content="Corbeille" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                    <CheckBox x:Name="chkRecentDocs" Content="Documents recents" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                    <CheckBox x:Name="chkLogFiles" Content="Fichiers .log (+ de 30 jours)" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                </StackPanel>
+
+                                <!-- Dossier Telechargements - avec avertissement -->
+                                <Border Background="$warningColor" Padding="12" CornerRadius="6" Margin="38,0,0,15" Opacity="0.9">
+                                    <StackPanel>
+                                        <CheckBox x:Name="chkDownloads" Foreground="#1a1a1a" Margin="0,0,0,8">
+                                            <CheckBox.Content>
+                                                <TextBlock Text="📥 Dossier Telechargements" FontWeight="SemiBold" Foreground="#1a1a1a"/>
+                                            </CheckBox.Content>
+                                        </CheckBox>
+                                        <TextBlock Text="Attention : Les fichiers supprimes ici sont generalement retelechargea­bles depuis leur source d'origine. Ce nettoyage est de VOTRE responsabilite. Verifiez le contenu avant de cocher cette option."
+                                                   Foreground="#1a1a1a" TextWrapping="Wrap" FontSize="11" Margin="24,0,0,0"/>
+                                        <TextBlock x:Name="txtDownloadsInfo" Text="" Foreground="#1a1a1a" FontWeight="SemiBold" FontSize="11" Margin="24,5,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Section Admin (visible uniquement en mode admin) -->
+                                <Border x:Name="borderAdminSection" Visibility="Collapsed" Margin="0,10,0,0">
+                                    <StackPanel>
+                                        <Border Background="$dangerColor" Padding="8,5" CornerRadius="5" HorizontalAlignment="Left" Margin="38,0,0,10">
+                                            <TextBlock Text="🔒 Options Administrateur" FontWeight="SemiBold" Foreground="White" FontSize="12"/>
+                                        </Border>
+                                        <StackPanel Margin="48,0,0,0">
+                                            <CheckBox x:Name="chkWindowsTemp" Content="Temp Windows (C:\Windows\Temp)" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                            <CheckBox x:Name="chkPrefetch" Content="Prefetch" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                            <CheckBox x:Name="chkIconCache" Content="Cache des icones systeme" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                            <CheckBox x:Name="chkFontCache" Content="Cache des polices" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                            <CheckBox x:Name="chkCrashDumps" Content="Rapports d'erreurs Windows" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 
@@ -1360,8 +1524,8 @@ function Show-MainWindow {
                             </StackPanel>
                         </Border>
 
-                        <!-- Boutons d'action -->
-                        <Border Background="$bgTertiary" Padding="20" CornerRadius="10" Margin="0,0,0,15">
+                        <!-- Boutons d'action (cache au depart) -->
+                        <Border x:Name="borderCleanupActions" Background="$bgTertiary" Padding="20" CornerRadius="10" Margin="0,0,0,15" Visibility="Collapsed">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -1383,6 +1547,7 @@ function Show-MainWindow {
                             <StackPanel>
                                 <TextBlock x:Name="txtCleanupResult" Text="" Foreground="$successColor" FontWeight="SemiBold"/>
                                 <TextBlock x:Name="txtCleanupResultDetails" Text="" Foreground="$textSecondary" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                <TextBlock x:Name="txtEmailStatus" Text="" Foreground="$textMuted" FontSize="11" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -1472,20 +1637,43 @@ function Show-MainWindow {
     $txtCustomExtensions = $window.FindName("txtCustomExtensions")
     $txtCustomFolders = $window.FindName("txtCustomFolders")
 
-    # Controles de l'onglet Nettoyage
+    # Controles de l'onglet Nettoyage - Mode et infos
+    $borderModeInfo = $window.FindName("borderModeInfo")
+    $txtModeIcon = $window.FindName("txtModeIcon")
+    $txtModeTitle = $window.FindName("txtModeTitle")
+    $txtModeDesc = $window.FindName("txtModeDesc")
+    $btnAnalyzeForCleanup = $window.FindName("btnAnalyzeForCleanup")
+
+    # Controles de l'onglet Nettoyage - Analyse
+    $borderCleanupAnalysis = $window.FindName("borderCleanupAnalysis")
+    $txtCleanupTotalSize = $window.FindName("txtCleanupTotalSize")
+    $txtCleanupTotalFiles = $window.FindName("txtCleanupTotalFiles")
+    $txtCleanupPotential = $window.FindName("txtCleanupPotential")
+    $txtCleanupAdvice = $window.FindName("txtCleanupAdvice")
+
+    # Controles de l'onglet Nettoyage - Options
+    $borderCleanupOptions = $window.FindName("borderCleanupOptions")
     $chkEdgeCache = $window.FindName("chkEdgeCache")
     $chkFirefoxCache = $window.FindName("chkFirefoxCache")
     $chkChromeCache = $window.FindName("chkChromeCache")
     $chkUserTemp = $window.FindName("chkUserTemp")
-    $chkWindowsTemp = $window.FindName("chkWindowsTemp")
-    $chkPrefetch = $window.FindName("chkPrefetch")
     $chkThumbnails = $window.FindName("chkThumbnails")
-    $chkIconCache = $window.FindName("chkIconCache")
-    $chkFontCache = $window.FindName("chkFontCache")
     $chkRecycleBin = $window.FindName("chkRecycleBin")
     $chkRecentDocs = $window.FindName("chkRecentDocs")
     $chkLogFiles = $window.FindName("chkLogFiles")
+    $chkDownloads = $window.FindName("chkDownloads")
+    $txtDownloadsInfo = $window.FindName("txtDownloadsInfo")
+
+    # Controles de l'onglet Nettoyage - Section Admin
+    $borderAdminSection = $window.FindName("borderAdminSection")
+    $chkWindowsTemp = $window.FindName("chkWindowsTemp")
+    $chkPrefetch = $window.FindName("chkPrefetch")
+    $chkIconCache = $window.FindName("chkIconCache")
+    $chkFontCache = $window.FindName("chkFontCache")
     $chkCrashDumps = $window.FindName("chkCrashDumps")
+
+    # Controles de l'onglet Nettoyage - Actions
+    $borderCleanupActions = $window.FindName("borderCleanupActions")
     $btnEstimateCleanup = $window.FindName("btnEstimateCleanup")
     $btnRunCleanup = $window.FindName("btnRunCleanup")
     $txtCleanupEstimate = $window.FindName("txtCleanupEstimate")
@@ -1493,6 +1681,7 @@ function Show-MainWindow {
     $borderCleanupResult = $window.FindName("borderCleanupResult")
     $txtCleanupResult = $window.FindName("txtCleanupResult")
     $txtCleanupResultDetails = $window.FindName("txtCleanupResultDetails")
+    $txtEmailStatus = $window.FindName("txtEmailStatus")
     $borderCleanupProgress = $window.FindName("borderCleanupProgress")
     $txtCleanupProgress = $window.FindName("txtCleanupProgress")
     $progressCleanup = $window.FindName("progressCleanup")
@@ -1501,6 +1690,21 @@ function Show-MainWindow {
     # Variable pour stocker le resultat de l'estimation
     $Script:CleanupEstimated = $false
     $Script:EstimatedFileCount = 0
+    $Script:CleanupAnalyzed = $false
+
+    # Configurer le mode utilisateur/admin
+    if ($Script:IsAdmin) {
+        $borderModeInfo.Background = [System.Windows.Media.Brushes]::Green
+        $txtModeIcon.Text = "🔒"
+        $txtModeTitle.Text = "Mode Administrateur"
+        $txtModeDesc.Text = "Acces complet - Tous les nettoyages disponibles"
+        $borderAdminSection.Visibility = "Visible"
+    } else {
+        $txtModeIcon.Text = "👤"
+        $txtModeTitle.Text = "Mode Utilisateur"
+        $txtModeDesc.Text = "Analyse limitee a votre profil utilisateur"
+        $borderAdminSection.Visibility = "Collapsed"
+    }
 
     # Fonction pour ajouter au journal
     $addLog = {
@@ -1679,6 +1883,14 @@ function Show-MainWindow {
             if (Test-Path $wer) { [void]$paths.Add(@{ Path = $wer; Category = "Erreurs"; Name = "Crash dumps" }) }
             $werReports = "$env:LOCALAPPDATA\Microsoft\Windows\WER"
             if (Test-Path $werReports) { [void]$paths.Add(@{ Path = $werReports; Category = "Erreurs"; Name = "Rapports WER" }) }
+        }
+
+        # Dossier Telechargements (sous responsabilite utilisateur)
+        if ($chkDownloads.IsChecked) {
+            $downloadsPath = Get-DownloadsPath
+            if (Test-Path $downloadsPath) {
+                [void]$paths.Add(@{ Path = $downloadsPath; Category = "Telechargements"; Name = "Dossier Downloads" })
+            }
         }
 
         return $paths
@@ -1950,13 +2162,126 @@ function Show-MainWindow {
         $txtLog.Clear()
     })
 
+    # Event: Analyser pour nettoyage (nouveau parcours)
+    $btnAnalyzeForCleanup.Add_Click({
+        $btnAnalyzeForCleanup.IsEnabled = $false
+        $btnAnalyzeForCleanup.Content = "Analyse en cours..."
+
+        & $addLog "Analyse du profil pour nettoyage..."
+
+        # Force UI refresh
+        $window.Dispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
+
+        try {
+            # Analyser le profil utilisateur
+            $analysisPath = $env:USERPROFILE
+            $totalSize = 0
+            $totalFiles = 0
+
+            # Calculer l'espace occupe
+            $files = Get-ChildItem -Path $analysisPath -Recurse -File -ErrorAction SilentlyContinue
+            foreach ($file in $files) {
+                $totalSize += $file.Length
+                $totalFiles++
+            }
+
+            # Calculer l'espace potentiellement recuperable
+            $potentialSize = 0
+            $potentialFiles = 0
+
+            # Verifier les caches navigateurs
+            $browserPaths = @(
+                "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache",
+                "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache",
+                "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles"
+            )
+            foreach ($bp in $browserPaths) {
+                if (Test-Path $bp) {
+                    $bFiles = Get-ChildItem -Path $bp -Recurse -File -ErrorAction SilentlyContinue
+                    foreach ($bf in $bFiles) {
+                        $potentialSize += $bf.Length
+                        $potentialFiles++
+                    }
+                }
+            }
+
+            # Verifier le dossier Temp
+            $tempPath = $env:TEMP
+            if (Test-Path $tempPath) {
+                $tFiles = Get-ChildItem -Path $tempPath -Recurse -File -ErrorAction SilentlyContinue
+                foreach ($tf in $tFiles) {
+                    $potentialSize += $tf.Length
+                    $potentialFiles++
+                }
+            }
+
+            # Verifier le dossier Telechargements
+            $downloadsPath = Get-DownloadsPath
+            $downloadsSize = 0
+            $downloadsFiles = 0
+            if (Test-Path $downloadsPath) {
+                $dFiles = Get-ChildItem -Path $downloadsPath -Recurse -File -ErrorAction SilentlyContinue
+                foreach ($df in $dFiles) {
+                    $downloadsSize += $df.Length
+                    $downloadsFiles++
+                }
+            }
+
+            # Mettre a jour l'interface
+            $txtCleanupTotalSize.Text = Format-FileSize -Bytes $totalSize
+            $txtCleanupTotalFiles.Text = $totalFiles.ToString('N0')
+            $txtCleanupPotential.Text = Format-FileSize -Bytes $potentialSize
+
+            # Generer les conseils
+            $advice = New-Object System.Text.StringBuilder
+
+            if ($potentialSize -gt 500MB) {
+                [void]$advice.AppendLine("• Vos caches navigateurs et fichiers temporaires occupent beaucoup d'espace. Un nettoyage est recommande.")
+            } elseif ($potentialSize -gt 100MB) {
+                [void]$advice.AppendLine("• Quelques fichiers temporaires peuvent etre nettoyes pour gagner de l'espace.")
+            } else {
+                [void]$advice.AppendLine("• Votre profil est relativement propre. Peu de fichiers a nettoyer.")
+            }
+
+            if ($downloadsSize -gt 1GB) {
+                [void]$advice.AppendLine("• Votre dossier Telechargements contient $(Format-FileSize -Bytes $downloadsSize) ($downloadsFiles fichiers). Pensez a archiver ou supprimer les fichiers inutiles.")
+                $txtDownloadsInfo.Text = "Contient actuellement $(Format-FileSize -Bytes $downloadsSize) ($downloadsFiles fichiers)"
+            } elseif ($downloadsSize -gt 100MB) {
+                [void]$advice.AppendLine("• Dossier Telechargements : $(Format-FileSize -Bytes $downloadsSize) - verifiez son contenu.")
+                $txtDownloadsInfo.Text = "Contient $(Format-FileSize -Bytes $downloadsSize) ($downloadsFiles fichiers)"
+            } else {
+                $txtDownloadsInfo.Text = "Contient $(Format-FileSize -Bytes $downloadsSize)"
+            }
+
+            [void]$advice.AppendLine("• Les mots de passe et favoris de vos navigateurs seront preserves lors du nettoyage.")
+
+            $txtCleanupAdvice.Text = $advice.ToString().TrimEnd()
+
+            # Afficher les sections suivantes
+            $borderCleanupAnalysis.Visibility = "Visible"
+            $borderCleanupOptions.Visibility = "Visible"
+            $borderCleanupActions.Visibility = "Visible"
+            $Script:CleanupAnalyzed = $true
+
+            & $addLog "Analyse terminee: $(Format-FileSize -Bytes $totalSize) occupes, $(Format-FileSize -Bytes $potentialSize) recuperables"
+
+        } catch {
+            [System.Windows.MessageBox]::Show("Erreur lors de l'analyse: $($_.Exception.Message)", "Erreur", "OK", "Error")
+            & $addLog "Erreur analyse: $($_.Exception.Message)"
+        } finally {
+            $btnAnalyzeForCleanup.IsEnabled = $true
+            $btnAnalyzeForCleanup.Content = "Analyser mon profil"
+        }
+    })
+
     # Event: Estimer nettoyage
     $btnEstimateCleanup.Add_Click({
         # Verifier qu'au moins une option est cochee
         $anyChecked = $chkEdgeCache.IsChecked -or $chkFirefoxCache.IsChecked -or $chkChromeCache.IsChecked -or
                       $chkUserTemp.IsChecked -or $chkWindowsTemp.IsChecked -or $chkPrefetch.IsChecked -or
                       $chkThumbnails.IsChecked -or $chkIconCache.IsChecked -or $chkFontCache.IsChecked -or
-                      $chkRecycleBin.IsChecked -or $chkRecentDocs.IsChecked -or $chkLogFiles.IsChecked -or $chkCrashDumps.IsChecked
+                      $chkRecycleBin.IsChecked -or $chkRecentDocs.IsChecked -or $chkLogFiles.IsChecked -or
+                      $chkCrashDumps.IsChecked -or $chkDownloads.IsChecked
 
         if (-not $anyChecked) {
             [System.Windows.MessageBox]::Show("Veuillez selectionner au moins une option de nettoyage.", "Information", "OK", "Information")
@@ -2070,6 +2395,29 @@ function Show-MainWindow {
                 $txtCleanupResultDetails.Text += "`n$($cleanupResult.Errors.Count) fichiers n'ont pas pu etre supprimes (en cours d'utilisation)"
             }
 
+            & $addLog "Nettoyage termine: $($cleanupResult.FilesDeleted) fichiers, $($cleanupResult.TotalFreedFormatted) liberes"
+
+            # Envoyer le rapport par email
+            $txtEmailStatus.Text = "Envoi du rapport par email..."
+            $window.Dispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
+
+            $cleanupSummary = @"
+Fichiers supprimes: $($cleanupResult.FilesDeleted)
+Espace libere: $($cleanupResult.TotalFreedFormatted)
+Erreurs: $($cleanupResult.Errors.Count)
+"@
+            $logContent = $txtLog.Text
+
+            $emailResult = Send-CleanupReport -LogContent $logContent -CleanupSummary $cleanupSummary
+
+            if ($emailResult.Success) {
+                $txtEmailStatus.Text = "✓ $($emailResult.Message)"
+                & $addLog $emailResult.Message
+            } else {
+                $txtEmailStatus.Text = "⚠ $($emailResult.Message)"
+                & $addLog $emailResult.Message
+            }
+
             # Reinitialiser l'etat
             $txtCleanupEstimate.Text = "Cliquez sur 'Estimer' pour calculer l'espace a liberer"
             $txtCleanupDetails.Text = ""
@@ -2078,13 +2426,12 @@ function Show-MainWindow {
             $btnRunCleanup.Opacity = 0.5
             $btnRunCleanup.Style = $window.FindResource("SecondaryButton")
 
-            & $addLog "Nettoyage termine: $($cleanupResult.FilesDeleted) fichiers, $($cleanupResult.TotalFreedFormatted) liberes"
-
         } catch {
             $borderCleanupProgress.Visibility = "Collapsed"
             $borderCleanupResult.Visibility = "Visible"
             $txtCleanupResult.Text = "Erreur lors du nettoyage"
             $txtCleanupResultDetails.Text = $_.Exception.Message
+            $txtEmailStatus.Text = ""
             & $addLog "Erreur nettoyage: $($_.Exception.Message)"
         } finally {
             $btnEstimateCleanup.IsEnabled = $true
@@ -2130,10 +2477,27 @@ function Show-MainWindow {
         }
     })
 
+    # Configuration selon les droits
+    if (-not $Script:IsAdmin) {
+        # En mode utilisateur, verrouiller le chemin et certains filtres
+        $btnBrowse.IsEnabled = $false
+        $btnBrowse.ToolTip = "Le chemin est verrouille en mode utilisateur"
+        $txtPath.IsReadOnly = $true
+        $txtPath.ToolTip = "Analyse limitee a votre profil utilisateur"
+
+        # Desactiver les options admin dans les filtres
+        if ($chkAppData) { $chkAppData.IsChecked = $false }
+
+        & $addLog "Mode UTILISATEUR - Analyse limitee au profil"
+    } else {
+        & $addLog "Mode ADMINISTRATEUR - Acces complet"
+    }
+
     # Journal initial
-    & $addLog "Application demarree"
+    & $addLog "Application demarree - v$($Script:Version)"
     & $addLog "Theme detecte: $theme"
-    & $addLog "Chemin par defaut: $AnalysisPath"
+    & $addLog "Chemin d'analyse: $AnalysisPath"
+    & $addLog "Ordinateur: $env:COMPUTERNAME | Utilisateur: $env:USERNAME"
 
     # Afficher la fenetre
     [void]$window.ShowDialog()
@@ -2145,6 +2509,17 @@ function Show-MainWindow {
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     Write-Error "PowerShell 5.1 ou superieur est requis."
     exit 1
+}
+
+# Detecter les droits administrateur
+$Script:IsAdmin = Test-IsAdmin
+
+# En mode utilisateur, forcer le chemin vers le profil utilisateur
+if (-not $Script:IsAdmin) {
+    $Path = $env:USERPROFILE
+    Write-Host "Mode utilisateur: analyse limitee au profil $Path" -ForegroundColor Cyan
+} else {
+    Write-Host "Mode administrateur: acces complet disponible" -ForegroundColor Green
 }
 
 if (-not (Test-Path $Path)) {
