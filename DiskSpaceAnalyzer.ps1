@@ -1369,7 +1369,7 @@ function Show-MainWindow {
                                 <WrapPanel>
                                     <CheckBox x:Name="chkDocuments" Content="Documents" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkDesktop" Content="Bureau" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
-                                    <CheckBox x:Name="chkDownloads" Content="Telechargements" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkDownloadsFolder" Content="Telechargements" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkPictures" Content="Images" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkVideos" Content="Videos" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkMusic" Content="Musique" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
@@ -1698,6 +1698,7 @@ function Show-MainWindow {
     $chkOst = $window.FindName("chkOst")
     $chkPst = $window.FindName("chkPst")
     $chkAppData = $window.FindName("chkAppData")
+    $chkDownloadsFolder = $window.FindName("chkDownloadsFolder")
     $txtMinSize = $window.FindName("txtMinSize")
     $txtOlderThan = $window.FindName("txtOlderThan")
     $txtCustomExtensions = $window.FindName("txtCustomExtensions")
@@ -1824,7 +1825,7 @@ function Show-MainWindow {
         # Sous-dossiers utilisateur selectionnes
         if ($chkDocuments.IsChecked) { $filters.SelectedSubfolders += 'Documents' }
         if ($chkDesktop.IsChecked) { $filters.SelectedSubfolders += 'Desktop' }
-        if ($chkDownloads.IsChecked) { $filters.SelectedSubfolders += 'Downloads' }
+        if ($chkDownloadsFolder.IsChecked) { $filters.SelectedSubfolders += 'Downloads' }
         if ($chkPictures.IsChecked) { $filters.SelectedSubfolders += 'Pictures' }
         if ($chkVideos.IsChecked) { $filters.SelectedSubfolders += 'Videos' }
         if ($chkMusic.IsChecked) { $filters.SelectedSubfolders += 'Music' }
@@ -2251,7 +2252,7 @@ function Show-MainWindow {
         # Sous-dossiers
         $chkDocuments.IsChecked = $true
         $chkDesktop.IsChecked = $true
-        $chkDownloads.IsChecked = $true
+        $chkDownloadsFolder.IsChecked = $true
         $chkPictures.IsChecked = $true
         $chkVideos.IsChecked = $true
         $chkMusic.IsChecked = $true
@@ -2265,7 +2266,7 @@ function Show-MainWindow {
     $btnSelectAllFolders.Add_Click({
         $chkDocuments.IsChecked = $true
         $chkDesktop.IsChecked = $true
-        $chkDownloads.IsChecked = $true
+        $chkDownloadsFolder.IsChecked = $true
         $chkPictures.IsChecked = $true
         $chkVideos.IsChecked = $true
         $chkMusic.IsChecked = $true
@@ -2278,7 +2279,7 @@ function Show-MainWindow {
     $btnDeselectAllFolders.Add_Click({
         $chkDocuments.IsChecked = $false
         $chkDesktop.IsChecked = $false
-        $chkDownloads.IsChecked = $false
+        $chkDownloadsFolder.IsChecked = $false
         $chkPictures.IsChecked = $false
         $chkVideos.IsChecked = $false
         $chkMusic.IsChecked = $false
