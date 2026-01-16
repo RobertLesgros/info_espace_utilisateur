@@ -426,13 +426,53 @@ function Start-Analysis {
 
     $resultsRef = [ref]$results
 
-    Scan-Directory -DirectoryPath $RootPath -ParentNode $rootNode -ProgressCallback $ProgressCallback -Results $resultsRef -Filters $Filters
+    # Verifier si on doit analyser des sous-dossiers specifiques
+    $isUserProfile = ($RootPath -eq $env:USERPROFILE) -or ($RootPath -eq [Environment]::GetFolderPath('UserProfile'))
+    $hasSelectedSubfolders = $Filters -and $Filters.SelectedSubfolders -and $Filters.SelectedSubfolders.Count -gt 0
+
+    if ($isUserProfile -and $hasSelectedSubfolders) {
+        # Mode sous-dossiers : analyser uniquement les sous-dossiers selectionnes
+        foreach ($subfolder in $Filters.SelectedSubfolders) {
+            if ($Script:CancelRequested) { break }
+
+            $subfolderPath = Join-Path $RootPath $subfolder
+            if (Test-Path $subfolderPath) {
+                $childNode = New-FolderNode -Name $subfolder -FullPath $subfolderPath
+                $rootNode.SubfolderCount++
+                [void]$rootNode.Children.Add($childNode)
+
+                Scan-Directory -DirectoryPath $subfolderPath -ParentNode $childNode -ProgressCallback $ProgressCallback -Results $resultsRef -Filters $Filters
+
+                $rootNode.Size += $childNode.Size
+                $rootNode.FileCount += $childNode.FileCount
+                $childNode.SizeFormatted = Format-FileSize -Bytes $childNode.Size
+            }
+        }
+    } else {
+        # Mode normal : analyser tout le dossier
+        Scan-Directory -DirectoryPath $RootPath -ParentNode $rootNode -ProgressCallback $ProgressCallback -Results $resultsRef -Filters $Filters
+    }
 
     $rootNode.SizeFormatted = Format-FileSize -Bytes $rootNode.Size
     $results.RootNode = $rootNode
     $results.TotalSize = $Script:TotalSize
     $results.TotalFiles = $Script:TotalFilesScanned
-    $results.TotalFolders = (Get-ChildItem -Path $RootPath -Directory -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+
+    # Compter les dossiers selon le mode
+    if ($isUserProfile -and $hasSelectedSubfolders) {
+        $folderCount = 0
+        foreach ($subfolder in $Filters.SelectedSubfolders) {
+            $subfolderPath = Join-Path $RootPath $subfolder
+            if (Test-Path $subfolderPath) {
+                $folderCount += (Get-ChildItem -Path $subfolderPath -Directory -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+                $folderCount++ # Compter le sous-dossier lui-meme
+            }
+        }
+        $results.TotalFolders = $folderCount
+    } else {
+        $results.TotalFolders = (Get-ChildItem -Path $RootPath -Directory -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+    }
+
     $results.TotalSizeFormatted = Format-FileSize -Bytes $results.TotalSize
 
     if ($results.TotalSize -gt 0) {
@@ -1324,12 +1364,36 @@ function Show-MainWindow {
                     <StackPanel Margin="20">
                         <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15">
                             <StackPanel>
+                                <TextBlock Text="Sous-dossiers utilisateur a analyser" FontSize="14" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,10"/>
+                                <TextBlock Text="Selectionnez les sous-dossiers du dossier utilisateur a inclure dans l'analyse:" Foreground="$textSecondary" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <WrapPanel>
+                                    <CheckBox x:Name="chkDocuments" Content="Documents" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkDesktop" Content="Bureau" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkDownloads" Content="Telechargements" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkPictures" Content="Images" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkVideos" Content="Videos" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkMusic" Content="Musique" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkAppDataLocal" Content="AppData\\Local" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkAppDataRoaming" Content="AppData\\Roaming" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkOneDrive" Content="OneDrive" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                </WrapPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button x:Name="btnSelectAllFolders" Content="Tout selectionner" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Padding="10,5"/>
+                                    <Button x:Name="btnDeselectAllFolders" Content="Tout deselectionner" Style="{StaticResource SecondaryButton}" Padding="10,5"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15">
+                            <StackPanel>
                                 <TextBlock Text="Extensions a exclure" FontSize="14" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,10"/>
                                 <WrapPanel>
                                     <CheckBox x:Name="chkTmp" Content=".tmp" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkLog" Content=".log" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkBak" Content=".bak" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkCache" Content=".cache" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkOst" Content=".ost" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkPst" Content=".pst" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                 </WrapPanel>
                                 <TextBox x:Name="txtCustomExtensions" Margin="0,10,0,0" Padding="10"
                                          Background="$bgPrimary" Foreground="$textPrimary" BorderBrush="$borderColor"
@@ -1631,6 +1695,8 @@ function Show-MainWindow {
     $chkLog = $window.FindName("chkLog")
     $chkBak = $window.FindName("chkBak")
     $chkCache = $window.FindName("chkCache")
+    $chkOst = $window.FindName("chkOst")
+    $chkPst = $window.FindName("chkPst")
     $chkAppData = $window.FindName("chkAppData")
     $txtMinSize = $window.FindName("txtMinSize")
     $txtOlderThan = $window.FindName("txtOlderThan")
@@ -1723,12 +1789,15 @@ function Show-MainWindow {
             ExcludedFolders = @()
             MinSize = 0
             OlderThan = $null
+            SelectedSubfolders = @()
         }
 
         if ($chkTmp.IsChecked) { $filters.ExcludedExtensions += '.tmp' }
         if ($chkLog.IsChecked) { $filters.ExcludedExtensions += '.log' }
         if ($chkBak.IsChecked) { $filters.ExcludedExtensions += '.bak' }
         if ($chkCache.IsChecked) { $filters.ExcludedExtensions += '.cache' }
+        if ($chkOst.IsChecked) { $filters.ExcludedExtensions += '.ost' }
+        if ($chkPst.IsChecked) { $filters.ExcludedExtensions += '.pst' }
 
         if ($txtCustomExtensions.Text) {
             $custom = $txtCustomExtensions.Text -split ',' | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ }
@@ -1751,6 +1820,17 @@ function Show-MainWindow {
         if ([int]::TryParse($txtOlderThan.Text, [ref]$olderThan) -and $olderThan -gt 0) {
             $filters.OlderThan = (Get-Date).AddDays(-$olderThan)
         }
+
+        # Sous-dossiers utilisateur selectionnes
+        if ($chkDocuments.IsChecked) { $filters.SelectedSubfolders += 'Documents' }
+        if ($chkDesktop.IsChecked) { $filters.SelectedSubfolders += 'Desktop' }
+        if ($chkDownloads.IsChecked) { $filters.SelectedSubfolders += 'Downloads' }
+        if ($chkPictures.IsChecked) { $filters.SelectedSubfolders += 'Pictures' }
+        if ($chkVideos.IsChecked) { $filters.SelectedSubfolders += 'Videos' }
+        if ($chkMusic.IsChecked) { $filters.SelectedSubfolders += 'Music' }
+        if ($chkAppDataLocal.IsChecked) { $filters.SelectedSubfolders += 'AppData\Local' }
+        if ($chkAppDataRoaming.IsChecked) { $filters.SelectedSubfolders += 'AppData\Roaming' }
+        if ($chkOneDrive.IsChecked) { $filters.SelectedSubfolders += 'OneDrive' }
 
         return $filters
     }
@@ -2065,6 +2145,18 @@ function Show-MainWindow {
 
         $filters = & $getFilters
 
+        # Verifier si on est en mode sous-dossiers
+        $isUserProfile = ($path -eq $env:USERPROFILE) -or ($path -eq [Environment]::GetFolderPath('UserProfile'))
+        if ($isUserProfile -and $filters.SelectedSubfolders.Count -gt 0) {
+            & $addLog "Mode sous-dossiers: $($filters.SelectedSubfolders.Count) sous-dossiers selectionnes"
+            foreach ($sf in $filters.SelectedSubfolders) {
+                & $addLog "  - $sf"
+            }
+        }
+        if ($filters.ExcludedExtensions.Count -gt 0) {
+            & $addLog "Extensions exclues: $($filters.ExcludedExtensions -join ', ')"
+        }
+
         try {
             $results = Start-Analysis -RootPath $path -ProgressCallback {
                 param($currentFolder, $filesScanned)
@@ -2149,12 +2241,50 @@ function Show-MainWindow {
         $chkLog.IsChecked = $true
         $chkBak.IsChecked = $true
         $chkCache.IsChecked = $true
+        $chkOst.IsChecked = $true
+        $chkPst.IsChecked = $true
         $chkAppData.IsChecked = $true
         $txtMinSize.Text = "0"
         $txtOlderThan.Text = "0"
         $txtCustomExtensions.Text = ""
         $txtCustomFolders.Text = ""
+        # Sous-dossiers
+        $chkDocuments.IsChecked = $true
+        $chkDesktop.IsChecked = $true
+        $chkDownloads.IsChecked = $true
+        $chkPictures.IsChecked = $true
+        $chkVideos.IsChecked = $true
+        $chkMusic.IsChecked = $true
+        $chkAppDataLocal.IsChecked = $true
+        $chkAppDataRoaming.IsChecked = $true
+        $chkOneDrive.IsChecked = $true
         & $addLog "Filtres reinitialises"
+    })
+
+    # Event: Tout selectionner sous-dossiers
+    $btnSelectAllFolders.Add_Click({
+        $chkDocuments.IsChecked = $true
+        $chkDesktop.IsChecked = $true
+        $chkDownloads.IsChecked = $true
+        $chkPictures.IsChecked = $true
+        $chkVideos.IsChecked = $true
+        $chkMusic.IsChecked = $true
+        $chkAppDataLocal.IsChecked = $true
+        $chkAppDataRoaming.IsChecked = $true
+        $chkOneDrive.IsChecked = $true
+    })
+
+    # Event: Tout deselectionner sous-dossiers
+    $btnDeselectAllFolders.Add_Click({
+        $chkDocuments.IsChecked = $false
+        $chkDesktop.IsChecked = $false
+        $chkDownloads.IsChecked = $false
+        $chkPictures.IsChecked = $false
+        $chkVideos.IsChecked = $false
+        $chkMusic.IsChecked = $false
+        $chkAppDataLocal.IsChecked = $false
+        $chkAppDataRoaming.IsChecked = $false
+        $chkOneDrive.IsChecked = $false
     })
 
     # Event: Effacer journal
