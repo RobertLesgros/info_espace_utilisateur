@@ -849,19 +849,31 @@ function Show-MainWindow {
     $theme = Get-SystemTheme
 
     if ($theme -eq "Dark") {
-        $bgPrimary = "#1a1a2e"
-        $bgSecondary = "#16213e"
-        $textPrimary = "#e8e8e8"
-        $textSecondary = "#a0a0a0"
-        $borderColor = "#3a3a5c"
-        $accentColor = "#4dabf7"
+        # Theme Sombre - couleurs plus contrastees
+        $bgPrimary = "#1e1e2e"       # Fond principal (bleu-noir)
+        $bgSecondary = "#2a2a3e"     # Fond secondaire (plus clair)
+        $bgTertiary = "#363650"      # Fond tertiaire pour les cartes
+        $textPrimary = "#ffffff"     # Texte principal (blanc pur)
+        $textSecondary = "#b8b8c8"   # Texte secondaire (gris clair)
+        $textMuted = "#8888a0"       # Texte attenue
+        $borderColor = "#4a4a6a"     # Bordures
+        $accentColor = "#6ea8fe"     # Accent bleu clair
+        $successColor = "#75b798"    # Vert
+        $warningColor = "#ffda6a"    # Jaune
+        $dangerColor = "#ea868f"     # Rouge clair
     } else {
-        $bgPrimary = "#ffffff"
-        $bgSecondary = "#f8f9fa"
-        $textPrimary = "#212529"
-        $textSecondary = "#6c757d"
-        $borderColor = "#dee2e6"
-        $accentColor = "#0d6efd"
+        # Theme Clair - couleurs classiques
+        $bgPrimary = "#ffffff"       # Fond principal (blanc)
+        $bgSecondary = "#f5f5f5"     # Fond secondaire (gris tres clair)
+        $bgTertiary = "#e9ecef"      # Fond tertiaire
+        $textPrimary = "#1a1a1a"     # Texte principal (noir)
+        $textSecondary = "#555555"   # Texte secondaire (gris fonce)
+        $textMuted = "#888888"       # Texte attenue
+        $borderColor = "#cccccc"     # Bordures
+        $accentColor = "#0d6efd"     # Accent bleu
+        $successColor = "#198754"    # Vert
+        $warningColor = "#ffc107"    # Jaune
+        $dangerColor = "#dc3545"     # Rouge
     }
 
     $xaml = @"
@@ -902,8 +914,90 @@ function Show-MainWindow {
 
         <Style x:Key="TabStyle" TargetType="TabItem">
             <Setter Property="Foreground" Value="$textPrimary"/>
+            <Setter Property="Background" Value="$bgSecondary"/>
             <Setter Property="Padding" Value="15,10"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderBrush" Value="$borderColor"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1,1,1,0"
+                                Padding="{TemplateBinding Padding}" Margin="2,0,2,0" CornerRadius="5,5,0,0">
+                            <ContentPresenter x:Name="ContentSite" ContentSource="Header"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"
+                                              TextBlock.FontWeight="{TemplateBinding FontWeight}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="$bgPrimary"/>
+                                <Setter Property="Foreground" Value="$accentColor"/>
+                                <Setter TargetName="Border" Property="BorderThickness" Value="1,1,1,0"/>
+                                <Setter TargetName="Border" Property="Margin" Value="2,-2,2,0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="$bgTertiary"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="$bgTertiary"/>
+            <Setter Property="Foreground" Value="$textPrimary"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="$borderColor"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="$borderColor"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button">
+            <Setter Property="Background" Value="$dangerColor"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.85"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
 
@@ -919,7 +1013,7 @@ function Show-MainWindow {
             <StackPanel Orientation="Horizontal">
                 <Button x:Name="btnAnalyze" Content="Analyser" Style="{StaticResource ModernButton}" Margin="0,0,10,0"/>
                 <Button x:Name="btnExport" Content="Exporter HTML" Style="{StaticResource ModernButton}" Margin="0,0,10,0" IsEnabled="False"/>
-                <Button x:Name="btnCancel" Content="Annuler" Style="{StaticResource ModernButton}" Margin="0,0,10,0" IsEnabled="False" Background="#dc3545" Foreground="White"/>
+                <Button x:Name="btnCancel" Content="Annuler" Style="{StaticResource DangerButton}" Margin="0,0,10,0" IsEnabled="False"/>
                 <Separator Margin="10,0" Background="$borderColor"/>
                 <TextBlock Text="Chemin:" VerticalAlignment="Center" Foreground="$textSecondary" Margin="0,0,10,0"/>
                 <TextBox x:Name="txtPath" Width="400" Padding="8" Background="$bgPrimary" Foreground="$textPrimary"
@@ -963,7 +1057,7 @@ function Show-MainWindow {
                             </Border>
                             <Border Background="$bgSecondary" Margin="5" Padding="20" CornerRadius="10" BorderBrush="$borderColor" BorderThickness="1">
                                 <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock x:Name="txtDuplicates" Text="--" FontSize="28" FontWeight="Bold" Foreground="#ffc107" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="txtDuplicates" Text="--" FontSize="28" FontWeight="Bold" Foreground="$warningColor" HorizontalAlignment="Center"/>
                                     <TextBlock Text="Doublons" Foreground="$textSecondary" HorizontalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
@@ -1063,7 +1157,7 @@ function Show-MainWindow {
                     <ListView x:Name="lstDuplicates" Grid.Row="1" Background="$bgPrimary" BorderBrush="$borderColor">
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="$bgSecondary" Padding="15" Margin="0,5" CornerRadius="8" BorderBrush="#ffc107" BorderThickness="0,0,0,3">
+                                <Border Background="$bgSecondary" Padding="15" Margin="0,5" CornerRadius="8" BorderBrush="$warningColor" BorderThickness="0,0,0,3">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                                             <TextBlock Text="{Binding FileName}" FontWeight="Bold" Foreground="$textPrimary" FontSize="14"/>
@@ -1072,7 +1166,7 @@ function Show-MainWindow {
                                             <TextBlock Text=" - " Foreground="$textSecondary"/>
                                             <TextBlock Text="{Binding Locations.Count, StringFormat={}{0} occurrences}" Foreground="$textSecondary"/>
                                             <TextBlock Text=" - Gaspille: " Foreground="$textSecondary" Margin="10,0,0,0"/>
-                                            <TextBlock Text="{Binding WastedSpaceFormatted}" Foreground="#dc3545" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding WastedSpaceFormatted}" Foreground="$dangerColor" FontWeight="SemiBold"/>
                                         </StackPanel>
                                         <ItemsControl ItemsSource="{Binding Locations}">
                                             <ItemsControl.ItemTemplate>
@@ -1147,7 +1241,7 @@ function Show-MainWindow {
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                             <Button x:Name="btnApplyFilters" Content="Appliquer et Re-analyser" Style="{StaticResource ModernButton}" Margin="0,0,10,0"/>
-                            <Button x:Name="btnResetFilters" Content="Reinitialiser" Style="{StaticResource ModernButton}" Background="#6c757d" Foreground="White"/>
+                            <Button x:Name="btnResetFilters" Content="Reinitialiser" Style="{StaticResource SecondaryButton}"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -1161,8 +1255,8 @@ function Show-MainWindow {
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <Button x:Name="btnClearLog" Content="Effacer le journal" Style="{StaticResource ModernButton}"
-                            HorizontalAlignment="Left" Margin="0,0,0,10" Background="#6c757d" Foreground="White"/>
+                    <Button x:Name="btnClearLog" Content="Effacer le journal" Style="{StaticResource SecondaryButton}"
+                            HorizontalAlignment="Left" Margin="0,0,0,10"/>
 
                     <TextBox x:Name="txtLog" Grid.Row="1" IsReadOnly="True" TextWrapping="Wrap"
                              VerticalScrollBarVisibility="Auto" Background="$bgSecondary"
