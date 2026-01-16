@@ -35,7 +35,7 @@ param(
 )
 
 #region Configuration et Variables Globales
-$Script:Version = "1.3"
+$Script:Version = "1.4"
 $Script:AppName = "Analyseur d'Espace Disque"
 $Script:CompanyName = "Mon Entreprise"
 $Script:AnalysisResults = $null
@@ -1292,7 +1292,12 @@ function Show-MainWindow {
                             </StackPanel>
                         </Border>
 
-                        <!-- Navigateurs -->
+                        <!-- Section Utilisateur -->
+                        <Border Background="$accentColor" Padding="8,5" CornerRadius="5" HorizontalAlignment="Left" Margin="0,0,0,10">
+                            <TextBlock Text="👤 Actions Utilisateur" FontWeight="SemiBold" Foreground="White"/>
+                        </Border>
+
+                        <!-- Navigateurs (Utilisateur) -->
                         <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
                             <StackPanel>
                                 <TextBlock Text="Cache des Navigateurs" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
@@ -1306,46 +1311,52 @@ function Show-MainWindow {
                             </StackPanel>
                         </Border>
 
-                        <!-- Fichiers temporaires Windows -->
+                        <!-- Fichiers utilisateur -->
                         <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="Fichiers Temporaires Windows" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
-                                <TextBlock Text="Nettoie les dossiers temporaires du systeme"
+                                <TextBlock Text="Fichiers Utilisateur" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                <TextBlock Text="Fichiers temporaires et historique de votre profil"
                                            Foreground="$textSecondary" Margin="0,0,0,15"/>
                                 <StackPanel Margin="10,0,0,0">
                                     <CheckBox x:Name="chkUserTemp" Content="Dossier Temp utilisateur (%TEMP%)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkWindowsTemp" Content="Dossier Temp Windows (C:\Windows\Temp)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkPrefetch" Content="Prefetch (C:\Windows\Prefetch)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Cache systeme -->
-                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="Cache Systeme" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
-                                <TextBlock Text="Nettoie les caches Windows non essentiels"
-                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
-                                <StackPanel Margin="10,0,0,0">
                                     <CheckBox x:Name="chkThumbnails" Content="Cache des miniatures (Thumbnails)" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkIconCache" Content="Cache des icones" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkFontCache" Content="Cache des polices" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Fichiers divers -->
-                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$borderColor" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="Autres Nettoyages" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
-                                <TextBlock Text="Fichiers supplementaires pouvant etre supprimes"
-                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
-                                <StackPanel Margin="10,0,0,0">
                                     <CheckBox x:Name="chkRecycleBin" Content="Vider la Corbeille" Foreground="$textPrimary" Margin="0,0,0,8"/>
                                     <CheckBox x:Name="chkRecentDocs" Content="Historique des documents recents" Foreground="$textPrimary" Margin="0,0,0,8"/>
                                     <CheckBox x:Name="chkLogFiles" Content="Fichiers journaux (.log) de plus de 30 jours" Foreground="$textPrimary" Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="chkCrashDumps" Content="Rapports d'erreurs Windows" Foreground="$textPrimary" Margin="0,0,0,8"/>
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Section Administrateur -->
+                        <Border Background="$dangerColor" Padding="8,5" CornerRadius="5" HorizontalAlignment="Left" Margin="0,15,0,10">
+                            <TextBlock Text="🔒 Actions Administrateur" FontWeight="SemiBold" Foreground="White"/>
+                        </Border>
+                        <TextBlock x:Name="txtAdminWarning" Text="Ces options necessitent des droits administrateur. Certains fichiers peuvent etre ignores si vous n'avez pas les permissions."
+                                   Foreground="$textMuted" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                        <!-- Fichiers systeme (Admin) -->
+                        <Border Background="$bgSecondary" Padding="20" CornerRadius="10" Margin="0,0,0,15" BorderBrush="$dangerColor" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Fichiers Systeme Windows" FontSize="16" FontWeight="SemiBold" Foreground="$textPrimary" Margin="0,0,0,5"/>
+                                <TextBlock Text="Necessite des privileges eleves pour un nettoyage complet"
+                                           Foreground="$textSecondary" Margin="0,0,0,15"/>
+                                <StackPanel Margin="10,0,0,0">
+                                    <CheckBox x:Name="chkWindowsTemp" Content="Dossier Temp Windows (C:\Windows\Temp)" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkPrefetch" Content="Prefetch (C:\Windows\Prefetch)" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkIconCache" Content="Cache des icones systeme" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkFontCache" Content="Cache des polices" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="chkCrashDumps" Content="Rapports d'erreurs et crash dumps" Foreground="$textPrimary" Margin="0,0,0,8"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Barre de progression -->
+                        <Border x:Name="borderCleanupProgress" Background="$bgSecondary" Padding="15" CornerRadius="8" Margin="0,0,0,15" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock x:Name="txtCleanupProgress" Text="Nettoyage en cours..." Foreground="$textPrimary" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <ProgressBar x:Name="progressCleanup" Height="20" Minimum="0" Maximum="100" Value="0"
+                                             Background="$bgTertiary" Foreground="$accentColor"/>
+                                <TextBlock x:Name="txtCleanupCurrentItem" Text="" Foreground="$textSecondary" FontSize="11" Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </Border>
 
@@ -1357,12 +1368,12 @@ function Show-MainWindow {
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock x:Name="txtCleanupEstimate" Text="Selectionnez les elements a nettoyer" Foreground="$textPrimary" FontWeight="SemiBold"/>
-                                    <TextBlock x:Name="txtCleanupDetails" Text="" Foreground="$textSecondary" FontSize="12"/>
+                                    <TextBlock x:Name="txtCleanupEstimate" Text="Cliquez sur 'Estimer' pour calculer l'espace a liberer" Foreground="$textPrimary" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="txtCleanupDetails" Text="" Foreground="$textSecondary" FontSize="12" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <Button x:Name="btnEstimateCleanup" Content="Estimer" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0"/>
-                                    <Button x:Name="btnRunCleanup" Content="Nettoyer" Style="{StaticResource DangerButton}"/>
+                                    <Button x:Name="btnRunCleanup" Content="Nettoyer" Style="{StaticResource SecondaryButton}" IsEnabled="False" Opacity="0.5"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -1482,6 +1493,14 @@ function Show-MainWindow {
     $borderCleanupResult = $window.FindName("borderCleanupResult")
     $txtCleanupResult = $window.FindName("txtCleanupResult")
     $txtCleanupResultDetails = $window.FindName("txtCleanupResultDetails")
+    $borderCleanupProgress = $window.FindName("borderCleanupProgress")
+    $txtCleanupProgress = $window.FindName("txtCleanupProgress")
+    $progressCleanup = $window.FindName("progressCleanup")
+    $txtCleanupCurrentItem = $window.FindName("txtCleanupCurrentItem")
+
+    # Variable pour stocker le resultat de l'estimation
+    $Script:CleanupEstimated = $false
+    $Script:EstimatedFileCount = 0
 
     # Fonction pour ajouter au journal
     $addLog = {
@@ -1669,10 +1688,12 @@ function Show-MainWindow {
     $estimateCleanup = {
         $paths = & $getCleanupPaths
         $totalSize = 0
+        $totalFiles = 0
         $details = New-Object System.Collections.ArrayList
 
         foreach ($item in $paths) {
             $size = 0
+            $fileCount = 0
             try {
                 if ($item.Pattern) {
                     if ($item.MaxAge) {
@@ -1681,36 +1702,56 @@ function Show-MainWindow {
                     } else {
                         $files = Get-ChildItem -Path $item.Path -Filter $item.Pattern -File -ErrorAction SilentlyContinue
                     }
-                    $size = ($files | Measure-Object -Property Length -Sum).Sum
+                    if ($files) {
+                        $measure = $files | Measure-Object -Property Length -Sum
+                        $size = $measure.Sum
+                        $fileCount = $measure.Count
+                    }
                 } else {
-                    $size = (Get-ChildItem -Path $item.Path -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                    $files = Get-ChildItem -Path $item.Path -Recurse -File -ErrorAction SilentlyContinue
+                    if ($files) {
+                        $measure = $files | Measure-Object -Property Length -Sum
+                        $size = $measure.Sum
+                        $fileCount = $measure.Count
+                    }
                 }
             } catch {
                 # Ignorer les erreurs d'acces
             }
             if ($null -eq $size) { $size = 0 }
+            if ($null -eq $fileCount) { $fileCount = 0 }
             $totalSize += $size
+            $totalFiles += $fileCount
             if ($size -gt 0) {
-                [void]$details.Add("$($item.Category)/$($item.Name): $(Format-FileSize -Bytes $size)")
+                [void]$details.Add("$($item.Category)/$($item.Name): $(Format-FileSize -Bytes $size) ($fileCount fichiers)")
             }
         }
 
         return @{
             TotalSize = $totalSize
             TotalSizeFormatted = Format-FileSize -Bytes $totalSize
+            TotalFiles = $totalFiles
             Details = $details
         }
     }
 
-    # Fonction pour effectuer le nettoyage
+    # Fonction pour effectuer le nettoyage avec progression
     $runCleanup = {
+        param([scriptblock]$ProgressCallback)
+
         $paths = & $getCleanupPaths
         $totalFreed = 0
         $filesDeleted = 0
         $errors = New-Object System.Collections.ArrayList
+        $totalItems = $paths.Count
+        $currentItem = 0
 
         # Vider la corbeille si demande
         if ($chkRecycleBin.IsChecked) {
+            $currentItem++
+            if ($ProgressCallback) {
+                & $ProgressCallback "Vidage de la corbeille..." $currentItem $totalItems
+            }
             try {
                 $shell = New-Object -ComObject Shell.Application
                 $recycleBin = $shell.Namespace(0xA)
@@ -1725,6 +1766,13 @@ function Show-MainWindow {
         }
 
         foreach ($item in $paths) {
+            $currentItem++
+            $itemName = "$($item.Category)/$($item.Name)"
+
+            if ($ProgressCallback) {
+                & $ProgressCallback "Nettoyage: $itemName" $currentItem $totalItems
+            }
+
             try {
                 if ($item.Pattern) {
                     if ($item.MaxAge) {
@@ -1744,7 +1792,14 @@ function Show-MainWindow {
                     }
                 } else {
                     $files = Get-ChildItem -Path $item.Path -Recurse -File -ErrorAction SilentlyContinue
+                    $fileIndex = 0
+                    $totalFilesInPath = @($files).Count
                     foreach ($file in $files) {
+                        $fileIndex++
+                        # Mise a jour periodique pour ne pas bloquer l'UI
+                        if ($fileIndex % 50 -eq 0 -and $ProgressCallback) {
+                            & $ProgressCallback "Nettoyage: $itemName ($fileIndex/$totalFilesInPath fichiers)" $currentItem $totalItems
+                        }
                         try {
                             $totalFreed += $file.Length
                             Remove-Item -Path $file.FullName -Force -ErrorAction Stop
@@ -1754,7 +1809,7 @@ function Show-MainWindow {
                         }
                     }
                 }
-                & $addLog "Nettoye: $($item.Category)/$($item.Name)"
+                & $addLog "Nettoye: $itemName"
             } catch {
                 [void]$errors.Add("$($item.Name): $($_.Exception.Message)")
                 & $addLog "Erreur nettoyage $($item.Name): $($_.Exception.Message)"
@@ -1897,25 +1952,6 @@ function Show-MainWindow {
 
     # Event: Estimer nettoyage
     $btnEstimateCleanup.Add_Click({
-        $txtCleanupEstimate.Text = "Estimation en cours..."
-        $txtCleanupDetails.Text = ""
-        $borderCleanupResult.Visibility = "Collapsed"
-
-        & $addLog "Estimation du nettoyage..."
-
-        try {
-            $estimate = & $estimateCleanup
-            $txtCleanupEstimate.Text = "Espace a liberer: $($estimate.TotalSizeFormatted)"
-            $txtCleanupDetails.Text = ($estimate.Details -join " | ")
-            & $addLog "Estimation terminee: $($estimate.TotalSizeFormatted)"
-        } catch {
-            $txtCleanupEstimate.Text = "Erreur lors de l'estimation"
-            & $addLog "Erreur estimation: $($_.Exception.Message)"
-        }
-    })
-
-    # Event: Lancer nettoyage
-    $btnRunCleanup.Add_Click({
         # Verifier qu'au moins une option est cochee
         $anyChecked = $chkEdgeCache.IsChecked -or $chkFirefoxCache.IsChecked -or $chkChromeCache.IsChecked -or
                       $chkUserTemp.IsChecked -or $chkWindowsTemp.IsChecked -or $chkPrefetch.IsChecked -or
@@ -1927,8 +1963,65 @@ function Show-MainWindow {
             return
         }
 
+        $txtCleanupEstimate.Text = "Estimation en cours, veuillez patienter..."
+        $txtCleanupDetails.Text = "Analyse des fichiers..."
+        $borderCleanupResult.Visibility = "Collapsed"
+        $btnEstimateCleanup.IsEnabled = $false
+        $btnRunCleanup.IsEnabled = $false
+        $btnRunCleanup.Opacity = 0.5
+
+        # Desactiver le bouton Nettoyer pendant l'estimation
+        $Script:CleanupEstimated = $false
+
+        & $addLog "Estimation du nettoyage..."
+
+        # Force UI refresh
+        $window.Dispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
+
+        try {
+            $estimate = & $estimateCleanup
+
+            $Script:EstimatedFileCount = $estimate.TotalFiles
+            $Script:CleanupEstimated = $true
+
+            if ($estimate.TotalFiles -gt 0) {
+                $txtCleanupEstimate.Text = "Espace a liberer: $($estimate.TotalSizeFormatted) ($($estimate.TotalFiles) fichiers)"
+                $txtCleanupDetails.Text = ($estimate.Details -join "`n")
+
+                # Activer le bouton Nettoyer avec style DangerButton
+                $btnRunCleanup.IsEnabled = $true
+                $btnRunCleanup.Opacity = 1
+                $btnRunCleanup.Style = $window.FindResource("DangerButton")
+
+                & $addLog "Estimation terminee: $($estimate.TotalSizeFormatted) ($($estimate.TotalFiles) fichiers)"
+            } else {
+                $txtCleanupEstimate.Text = "Aucun fichier a nettoyer"
+                $txtCleanupDetails.Text = "Les emplacements selectionnes sont deja vides ou inaccessibles."
+                $btnRunCleanup.IsEnabled = $false
+                $btnRunCleanup.Opacity = 0.5
+                & $addLog "Estimation terminee: aucun fichier a nettoyer"
+            }
+        } catch {
+            $txtCleanupEstimate.Text = "Erreur lors de l'estimation"
+            $txtCleanupDetails.Text = $_.Exception.Message
+            $btnRunCleanup.IsEnabled = $false
+            $btnRunCleanup.Opacity = 0.5
+            & $addLog "Erreur estimation: $($_.Exception.Message)"
+        } finally {
+            $btnEstimateCleanup.IsEnabled = $true
+        }
+    })
+
+    # Event: Lancer nettoyage
+    $btnRunCleanup.Add_Click({
+        # Verifier que l'estimation a ete faite
+        if (-not $Script:CleanupEstimated) {
+            [System.Windows.MessageBox]::Show("Veuillez d'abord cliquer sur 'Estimer' pour calculer l'espace a liberer.", "Information", "OK", "Information")
+            return
+        }
+
         $result = [System.Windows.MessageBox]::Show(
-            "Etes-vous sur de vouloir supprimer definitivement les fichiers selectionnes?`n`nCette action est irreversible.",
+            "Etes-vous sur de vouloir supprimer definitivement $($Script:EstimatedFileCount) fichiers?`n`nCette action est irreversible.",
             "Confirmation",
             "YesNo",
             "Warning"
@@ -1936,16 +2029,39 @@ function Show-MainWindow {
 
         if ($result -ne "Yes") { return }
 
+        # Afficher la barre de progression
+        $borderCleanupProgress.Visibility = "Visible"
+        $borderCleanupResult.Visibility = "Collapsed"
+        $progressCleanup.Value = 0
+        $txtCleanupProgress.Text = "Preparation du nettoyage..."
+        $txtCleanupCurrentItem.Text = ""
+
         $txtCleanupEstimate.Text = "Nettoyage en cours..."
-        $txtCleanupDetails.Text = ""
+        $txtCleanupDetails.Text = "Ne fermez pas la fenetre"
         $btnRunCleanup.IsEnabled = $false
         $btnEstimateCleanup.IsEnabled = $false
 
         & $addLog "Debut du nettoyage..."
 
-        try {
-            $cleanupResult = & $runCleanup
+        # Force UI refresh
+        $window.Dispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
 
+        try {
+            # Callback pour mise a jour de la progression
+            $progressCallback = {
+                param([string]$currentTask, [int]$current, [int]$total)
+                $window.Dispatcher.Invoke([Action]{
+                    $percent = if ($total -gt 0) { [math]::Round(($current / $total) * 100) } else { 0 }
+                    $progressCleanup.Value = $percent
+                    $txtCleanupProgress.Text = "Nettoyage en cours... ($percent%)"
+                    $txtCleanupCurrentItem.Text = $currentTask
+                }, [System.Windows.Threading.DispatcherPriority]::Background)
+            }
+
+            $cleanupResult = & $runCleanup -ProgressCallback $progressCallback
+
+            # Masquer la progression et afficher le resultat
+            $borderCleanupProgress.Visibility = "Collapsed"
             $borderCleanupResult.Visibility = "Visible"
             $txtCleanupResult.Text = "Nettoyage termine avec succes!"
             $txtCleanupResultDetails.Text = "$($cleanupResult.FilesDeleted) fichiers supprimes - $($cleanupResult.TotalFreedFormatted) liberes"
@@ -1954,18 +2070,23 @@ function Show-MainWindow {
                 $txtCleanupResultDetails.Text += "`n$($cleanupResult.Errors.Count) fichiers n'ont pas pu etre supprimes (en cours d'utilisation)"
             }
 
-            $txtCleanupEstimate.Text = "Selectionnez les elements a nettoyer"
+            # Reinitialiser l'etat
+            $txtCleanupEstimate.Text = "Cliquez sur 'Estimer' pour calculer l'espace a liberer"
             $txtCleanupDetails.Text = ""
+            $Script:CleanupEstimated = $false
+            $btnRunCleanup.IsEnabled = $false
+            $btnRunCleanup.Opacity = 0.5
+            $btnRunCleanup.Style = $window.FindResource("SecondaryButton")
 
             & $addLog "Nettoyage termine: $($cleanupResult.FilesDeleted) fichiers, $($cleanupResult.TotalFreedFormatted) liberes"
 
         } catch {
+            $borderCleanupProgress.Visibility = "Collapsed"
             $borderCleanupResult.Visibility = "Visible"
             $txtCleanupResult.Text = "Erreur lors du nettoyage"
             $txtCleanupResultDetails.Text = $_.Exception.Message
             & $addLog "Erreur nettoyage: $($_.Exception.Message)"
         } finally {
-            $btnRunCleanup.IsEnabled = $true
             $btnEstimateCleanup.IsEnabled = $true
         }
     })

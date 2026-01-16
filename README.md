@@ -107,4 +107,8 @@ Script libre d'utilisation.
 
 ## Version
 
-1.3 - Janvier 2026
+1.4 - Janvier 2026
+- Separation des actions utilisateur/administrateur dans l'onglet Nettoyage
+- Estimation incluant le nombre de fichiers
+- Bouton Nettoyer actif uniquement apres estimation
+- Barre de progression lors du nettoyage
