@@ -1676,6 +1676,8 @@ function Show-MainWindow {
     $btnResetFilters = $window.FindName("btnResetFilters")
     $btnClearLog = $window.FindName("btnClearLog")
     $btnToggleTheme = $window.FindName("btnToggleTheme")
+    $btnSelectAllFolders = $window.FindName("btnSelectAllFolders")
+    $btnDeselectAllFolders = $window.FindName("btnDeselectAllFolders")
     $txtPath = $window.FindName("txtPath")
     $txtStatus = $window.FindName("txtStatus")
     $txtCurrentFolder = $window.FindName("txtCurrentFolder")
