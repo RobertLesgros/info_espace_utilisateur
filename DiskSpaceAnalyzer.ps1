@@ -1369,7 +1369,7 @@ function Show-MainWindow {
                                 <WrapPanel>
                                     <CheckBox x:Name="chkDocuments" Content="Documents" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkDesktop" Content="Bureau" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
-                                    <CheckBox x:Name="chkDownloads" Content="Telechargements" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
+                                    <CheckBox x:Name="chkDownloadsFolder" Content="Telechargements" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkPictures" Content="Images" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkVideos" Content="Videos" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
                                     <CheckBox x:Name="chkMusic" Content="Musique" Foreground="$textPrimary" Margin="0,0,15,5" IsChecked="True"/>
@@ -1678,6 +1678,15 @@ function Show-MainWindow {
     $btnToggleTheme = $window.FindName("btnToggleTheme")
     $btnSelectAllFolders = $window.FindName("btnSelectAllFolders")
     $btnDeselectAllFolders = $window.FindName("btnDeselectAllFolders")
+    $chkDocuments = $window.FindName("chkDocuments")
+    $chkDesktop = $window.FindName("chkDesktop")
+    $chkDownloadsFolder = $window.FindName("chkDownloadsFolder")
+    $chkPictures = $window.FindName("chkPictures")
+    $chkVideos = $window.FindName("chkVideos")
+    $chkMusic = $window.FindName("chkMusic")
+    $chkAppDataLocal = $window.FindName("chkAppDataLocal")
+    $chkAppDataRoaming = $window.FindName("chkAppDataRoaming")
+    $chkOneDrive = $window.FindName("chkOneDrive")
     $txtPath = $window.FindName("txtPath")
     $txtStatus = $window.FindName("txtStatus")
     $txtCurrentFolder = $window.FindName("txtCurrentFolder")
@@ -1826,7 +1835,7 @@ function Show-MainWindow {
         # Sous-dossiers utilisateur selectionnes
         if ($chkDocuments.IsChecked) { $filters.SelectedSubfolders += 'Documents' }
         if ($chkDesktop.IsChecked) { $filters.SelectedSubfolders += 'Desktop' }
-        if ($chkDownloads.IsChecked) { $filters.SelectedSubfolders += 'Downloads' }
+        if ($chkDownloadsFolder.IsChecked) { $filters.SelectedSubfolders += 'Downloads' }
         if ($chkPictures.IsChecked) { $filters.SelectedSubfolders += 'Pictures' }
         if ($chkVideos.IsChecked) { $filters.SelectedSubfolders += 'Videos' }
         if ($chkMusic.IsChecked) { $filters.SelectedSubfolders += 'Music' }
@@ -2253,7 +2262,7 @@ function Show-MainWindow {
         # Sous-dossiers
         $chkDocuments.IsChecked = $true
         $chkDesktop.IsChecked = $true
-        $chkDownloads.IsChecked = $true
+        $chkDownloadsFolder.IsChecked = $true
         $chkPictures.IsChecked = $true
         $chkVideos.IsChecked = $true
         $chkMusic.IsChecked = $true
@@ -2267,7 +2276,7 @@ function Show-MainWindow {
     $btnSelectAllFolders.Add_Click({
         $chkDocuments.IsChecked = $true
         $chkDesktop.IsChecked = $true
-        $chkDownloads.IsChecked = $true
+        $chkDownloadsFolder.IsChecked = $true
         $chkPictures.IsChecked = $true
         $chkVideos.IsChecked = $true
         $chkMusic.IsChecked = $true
@@ -2280,7 +2289,7 @@ function Show-MainWindow {
     $btnDeselectAllFolders.Add_Click({
         $chkDocuments.IsChecked = $false
         $chkDesktop.IsChecked = $false
-        $chkDownloads.IsChecked = $false
+        $chkDownloadsFolder.IsChecked = $false
         $chkPictures.IsChecked = $false
         $chkVideos.IsChecked = $false
         $chkMusic.IsChecked = $false
@@ -2579,6 +2588,7 @@ Erreurs: $($cleanupResult.Errors.Count)
             $Script:ForcedTheme = "Dark"
         }
         # Fermer et reouvrir la fenetre avec le nouveau theme
+        $Script:RestartForTheme = $true
         $window.Close()
     })
 
@@ -2660,11 +2670,10 @@ if (-not (Test-Path $Path)) {
 }
 
 # Boucle pour permettre le changement de theme
-$previousTheme = $null
+$Script:RestartForTheme = $false
 do {
-    $currentTheme = Get-SystemTheme
+    $Script:RestartForTheme = $false
     Show-MainWindow -AnalysisPath $Path
-    # Si le theme a change, on reboucle pour reouvrir avec le nouveau theme
-} while ($Script:ForcedTheme -ne $null -and $previousTheme -ne $Script:ForcedTheme -and ($previousTheme = $Script:ForcedTheme))
+} while ($Script:RestartForTheme)
 
 #endregion
