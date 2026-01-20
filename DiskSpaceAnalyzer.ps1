@@ -31,7 +31,9 @@
 param(
     [string]$Path = $env:USERPROFILE,
     [string]$ExportPath = $env:TEMP,
-    [string]$SupportEmail = "support@entreprise.com"
+    [string]$SupportEmail = "support@entreprise.com",
+    [switch]$DeployLauncher,
+    [switch]$SkipLauncherDeploy
 )
 
 #region Configuration et Variables Globales
@@ -152,6 +154,99 @@ function Get-DownloadsPath {
         return $downloads.Self.Path
     }
     return Join-Path $env:USERPROFILE "Downloads"
+}
+
+# Deployer le lanceur VBS dans OUTILS_DI sur le bureau
+function Deploy-VbsLauncher {
+    param(
+        [switch]$Force
+    )
+
+    $desktopPath = [Environment]::GetFolderPath("Desktop")
+    $outilsDiPath = Join-Path $desktopPath "OUTILS_DI"
+    $vbsPath = Join-Path $outilsDiPath "Analyseur_Espace_Disque.vbs"
+    $ps1SourcePath = $PSCommandPath
+
+    # Creer le dossier OUTILS_DI s'il n'existe pas
+    if (-not (Test-Path $outilsDiPath)) {
+        New-Item -ItemType Directory -Path $outilsDiPath -Force | Out-Null
+        Write-Host "Dossier OUTILS_DI cree sur le bureau" -ForegroundColor Green
+    }
+
+    # Verifier si le VBS existe deja
+    if ((Test-Path $vbsPath) -and -not $Force) {
+        return @{
+            Success = $true
+            Message = "Le lanceur existe deja: $vbsPath"
+            Path = $vbsPath
+        }
+    }
+
+    # Contenu du fichier VBS
+    $vbsContent = @"
+' ============================================
+' Lanceur Analyseur d'Espace Disque
+' Execute le script PowerShell sans fenetre
+' Version: $($Script:Version)
+' ============================================
+
+Option Explicit
+
+Dim objShell, objFSO
+Dim strScriptPath, strPowerShell, strCommand
+
+Set objShell = CreateObject("WScript.Shell")
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+' Chemin du script PowerShell (meme dossier que ce VBS ou dossier source)
+strScriptPath = "$($ps1SourcePath -replace '\\', '\\')"
+
+' Verifier si le script existe
+If Not objFSO.FileExists(strScriptPath) Then
+    ' Essayer dans le meme dossier que le VBS
+    strScriptPath = objFSO.GetParentFolderName(WScript.ScriptFullName) & "\DiskSpaceAnalyzer.ps1"
+
+    If Not objFSO.FileExists(strScriptPath) Then
+        MsgBox "Le script PowerShell n'a pas ete trouve." & vbCrLf & vbCrLf & _
+               "Chemin attendu:" & vbCrLf & strScriptPath, vbCritical, "Erreur - Analyseur Espace Disque"
+        WScript.Quit 1
+    End If
+End If
+
+' Construire la commande PowerShell
+strPowerShell = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & strScriptPath & """"
+
+' Executer le script PowerShell sans fenetre visible (0 = Hidden)
+objShell.Run strPowerShell, 0, False
+
+' Nettoyage
+Set objFSO = Nothing
+Set objShell = Nothing
+"@
+
+    try {
+        # Ecrire le fichier VBS
+        Set-Content -Path $vbsPath -Value $vbsContent -Encoding Default -Force
+
+        # Copier aussi le PS1 dans OUTILS_DI pour l'autonomie
+        $ps1DestPath = Join-Path $outilsDiPath "DiskSpaceAnalyzer.ps1"
+        if ($ps1SourcePath -and (Test-Path $ps1SourcePath)) {
+            Copy-Item -Path $ps1SourcePath -Destination $ps1DestPath -Force
+        }
+
+        return @{
+            Success = $true
+            Message = "Lanceur deploye avec succes dans OUTILS_DI"
+            Path = $vbsPath
+            Ps1Path = $ps1DestPath
+        }
+    } catch {
+        return @{
+            Success = $false
+            Message = "Erreur lors du deploiement: $($_.Exception.Message)"
+            Path = $null
+        }
+    }
 }
 
 #endregion
@@ -2655,6 +2750,30 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 
 # Detecter les droits administrateur
 $Script:IsAdmin = Test-IsAdmin
+
+# Mode deploiement uniquement (installe le lanceur et quitte)
+if ($DeployLauncher) {
+    Write-Host "Deploiement du lanceur VBS..." -ForegroundColor Cyan
+    $deployResult = Deploy-VbsLauncher -Force
+    if ($deployResult.Success) {
+        Write-Host $deployResult.Message -ForegroundColor Green
+        Write-Host "Lanceur: $($deployResult.Path)" -ForegroundColor Gray
+        if ($deployResult.Ps1Path) {
+            Write-Host "Script: $($deployResult.Ps1Path)" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host $deployResult.Message -ForegroundColor Red
+    }
+    exit 0
+}
+
+# Deploiement automatique du lanceur (sauf si -SkipLauncherDeploy)
+if (-not $SkipLauncherDeploy) {
+    $deployResult = Deploy-VbsLauncher
+    if ($deployResult.Success -and $deployResult.Path) {
+        Write-Host "Lanceur disponible: $($deployResult.Path)" -ForegroundColor DarkGray
+    }
+}
 
 # En mode utilisateur, forcer le chemin vers le profil utilisateur
 if (-not $Script:IsAdmin) {
